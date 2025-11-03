@@ -10,7 +10,8 @@ import {
   Database,
   Camera,
   Sparkles,
-  Target
+  Target,
+  MessageSquare,
 } from 'lucide-react';
 import { ModalSQL } from './ModalSQL';
 import { ModalTypes } from './ModalTypes';
@@ -18,8 +19,13 @@ import { HelperZoom } from './HelperZoom';
 import { Button } from '@/components/ui/button';
 import AES from 'crypto-js/aes';
 
-export function Helper() {
-  const { tables, schemaView, supabaseApiKey, setSchemaView, autoArrange } = useStore();
+interface HelperProps {
+  onChatOpen?: () => void;
+}
+
+export function Helper({ onChatOpen }: HelperProps) {
+  const { tables, schemaView, supabaseApiKey, setSchemaView, autoArrange } =
+    useStore();
   const { copy, copied } = useClipboard();
   const [exportSQL, setExportSQL] = useState(false);
   const [exportTypes, setExportTypes] = useState(false);
@@ -66,14 +72,16 @@ export function Helper() {
       skipFonts: true,
       cacheBust: true,
       pixelRatio: 2,
-    }).then((dataUrl) => {
-      const link = document.createElement('a');
-      link.download = 'Supabase Schema.png';
-      link.href = dataUrl;
-      link.click();
-    }).catch((error) => {
-      console.error('Error taking screenshot:', error);
-    });
+    })
+      .then((dataUrl) => {
+        const link = document.createElement('a');
+        link.download = 'Supabase Schema.png';
+        link.href = dataUrl;
+        link.click();
+      })
+      .catch((error) => {
+        console.error('Error taking screenshot:', error);
+      });
   };
 
   const shareLink = () => {
@@ -148,6 +156,17 @@ export function Helper() {
         >
           <Target size={20} />
         </Button>
+
+        {onChatOpen && (
+          <Button
+            variant="outline"
+            size="icon"
+            title="Open SQL AI Chat"
+            onClick={onChatOpen}
+          >
+            <MessageSquare size={20} />
+          </Button>
+        )}
 
         <HelperZoom />
       </div>

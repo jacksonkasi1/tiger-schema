@@ -4,6 +4,7 @@ import { useEffect, useState, useMemo } from 'react';
 import { useStore } from '@/lib/store';
 import { Table } from '@/components/Table';
 import { Helper } from '@/components/Helper';
+import { ChatSidebar } from '@/components/ChatSidebar';
 import { SelectionArea, SelectionEvent } from '@viselect/react';
 
 export default function HomePage() {
@@ -11,6 +12,7 @@ export default function HomePage() {
   const [isMounted, setIsMounted] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const [isDraggingChild, setIsDraggingChild] = useState(false);
+  const [isChatOpen, setIsChatOpen] = useState(false);
 
   useEffect(() => {
     setIsMounted(true);
@@ -160,7 +162,8 @@ export default function HomePage() {
 
   return (
     <div>
-      <Helper />
+      <Helper onChatOpen={() => setIsChatOpen(true)} />
+      <ChatSidebar isOpen={isChatOpen} onOpenChange={setIsChatOpen} />
 
       <SelectionArea
         className="container"

@@ -8,33 +8,48 @@ export async function POST(req: Request): Promise<Response> {
       return new Response('Missing OpenAI API key', { status: 500 });
     }
 
-    const { schema, query } = (await req.json()) as {
+    const { schema, query, chatHistory } = (await req.json()) as {
       schema?: string;
       query?: string;
+      chatHistory?: Array<{ role: string; content: string }>;
     };
 
     if (!query) {
       return new Response('No query in the request', { status: 400 });
     }
 
+    // Build messages array with chat history
+    const messages: Array<{ role: string; content: string }> = [
+      {
+        role: 'system',
+        content:
+          'You are Postgres & Supabase expert. Translate given natural language query into SQL without changing the case of the entries given. Maintain context from previous conversations. When modifying schema, provide incremental changes, not full regeneration.',
+      },
+    ];
+
+    // Add chat history if provided
+    if (chatHistory && chatHistory.length > 0) {
+      // Add previous conversation context (limit to last 5 messages to avoid token limit)
+      const recentHistory = chatHistory.slice(-5);
+      messages.push(...recentHistory);
+    }
+
+    // Add current schema and query
+    messages.push({
+      role: 'user',
+      content: schema
+        ? `### Postgres SQL tables, with their properties:\n#${schema}\n### ${query}\n`
+        : `### ${query}\n`,
+    });
+
     const payload: OpenAIStreamPayload = {
       model: 'gpt-3.5-turbo',
-      messages: [
-        {
-          role: 'system',
-          content:
-            'You are Postgres & Supabase expert. Translate given natural language query into SQL without changing the case of the entries given.',
-        },
-        {
-          role: 'user',
-          content: `### Postgres SQL tables, with their properties:\n#${schema}\n### ${query}\n`,
-        },
-      ],
+      messages,
       temperature: 0.7,
       top_p: 1,
       frequency_penalty: 0,
       presence_penalty: 0,
-      max_tokens: 200,
+      max_tokens: 500, // Increased for better responses
       stream: true,
       n: 1,
     };
