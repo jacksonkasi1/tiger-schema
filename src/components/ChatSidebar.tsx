@@ -236,7 +236,7 @@ export function ChatSidebar({
       {/* Sidebar */}
       <div
         className={cn(
-          'fixed right-0 top-0 z-40 h-full w-[420px] bg-background border-l shadow-2xl transition-transform duration-300 ease-in-out flex flex-col',
+          'fixed right-0 top-0 z-[9999] h-full w-[420px] bg-background border-l shadow-2xl transition-transform duration-300 ease-in-out flex flex-col',
           isOpen ? 'translate-x-0' : 'translate-x-full'
         )}
       >
@@ -430,7 +430,7 @@ export function ChatSidebar({
       {/* Overlay */}
       {isOpen && (
         <div
-          className="fixed inset-0 z-30 bg-black/20 backdrop-blur-sm"
+          className="fixed inset-0 z-[9998] bg-black/20 backdrop-blur-sm"
           onClick={() => setIsOpen(false)}
         />
       )}
