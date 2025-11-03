@@ -7,11 +7,18 @@ import UTF8 from 'crypto-js/enc-utf8';
 import { useRouter } from 'next/navigation';
 import { Settings } from './Settings';
 import { Loading } from './Loading';
+import { getSampleData } from '@/data/sampleData';
 
 export function RootProvider({ children }: { children: React.ReactNode }) {
   const [isFetching, setIsFetching] = useState(false);
   const [isInitialized, setIsInitialized] = useState(false);
-  const { setTables, setSchemaView, setSupabaseApiKey, initializeFromLocalStorage } = useStore();
+  const {
+    setTables,
+    setSchemaView,
+    setSupabaseApiKey,
+    initializeFromLocalStorage,
+    autoArrange,
+  } = useStore();
   const router = useRouter();
 
   // Initialize from localStorage on mount
@@ -19,6 +26,24 @@ export function RootProvider({ children }: { children: React.ReactNode }) {
     initializeFromLocalStorage();
     setIsInitialized(true);
   }, [initializeFromLocalStorage]);
+
+  // Load sample data if no tables exist after initialization
+  useEffect(() => {
+    if (!isInitialized) return;
+
+    const tablesData = localStorage.getItem('table-list');
+    const parsedTables = tablesData ? JSON.parse(tablesData) : {};
+
+    // Load sample data if no tables exist
+    if (!tablesData || Object.keys(parsedTables).length === 0) {
+      const sampleData = getSampleData();
+      setTables(sampleData.definitions, sampleData.paths);
+      // Auto arrange after a short delay to ensure DOM is ready
+      setTimeout(() => {
+        autoArrange();
+      }, 200);
+    }
+  }, [isInitialized, setTables, autoArrange]);
 
   // Handle hash changes for shared links
   useEffect(() => {
