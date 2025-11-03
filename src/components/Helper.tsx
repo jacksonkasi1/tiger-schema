@@ -62,11 +62,17 @@ export function Helper() {
 
   const screenshot = () => {
     const el = document.getElementById('screen-canvas') as HTMLElement;
-    toPng(el).then((dataUrl) => {
+    toPng(el, {
+      skipFonts: true,
+      cacheBust: true,
+      pixelRatio: 2,
+    }).then((dataUrl) => {
       const link = document.createElement('a');
       link.download = 'Supabase Schema.png';
       link.href = dataUrl;
       link.click();
+    }).catch((error) => {
+      console.error('Error taking screenshot:', error);
     });
   };
 

@@ -9,6 +9,8 @@ import hljs from 'highlight.js/lib/core';
 // @ts-ignore - No type definitions available
 import sql from 'highlight.js/lib/languages/sql';
 import 'highlight.js/styles/dark.css';
+import { Card, CardContent } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
 
 hljs.registerLanguage('sql', sql);
 
@@ -38,51 +40,57 @@ export function SQLCard({ item, onDelete }: SQLCardProps) {
   }, [item.result]);
 
   return (
-    <div className="text-left p-6 rounded-xl bg-gray-100 hover:bg-gray-200 dark:bg-dark-800 dark:hover:bg-dark-700 transition md:max-w-[36rem]">
-      <p className="text-gray-900 dark:text-gray-300">{item.query}</p>
-      <pre
-        className="mt-2 text-sm p-4 whitespace-pre-wrap border-gray-300 bg-gray-300 dark:bg-dark-900 rounded-lg border-2 dark:border-dark-border"
-        dangerouslySetInnerHTML={{ __html: highlightedCode }}
-      />
+    <Card className="md:max-w-[36rem] hover:bg-accent/50 transition">
+      <CardContent className="p-6 space-y-4">
+        <p className="text-foreground">{item.query}</p>
+        <pre
+          className="text-sm p-4 whitespace-pre-wrap bg-muted rounded-lg border"
+          dangerouslySetInnerHTML={{ __html: highlightedCode }}
+        />
 
-      <div className="mt-4 flex items-center space-x-2 justify-between">
-        <div className="flex items-center space-x-4">
-          <button
-            title={copied ? 'Copied' : 'Copy'}
-            disabled={!item.result}
-            onClick={() => copy(item.result ?? '')}
-            className="text-gray-900 dark:text-gray-300 dark:hover:text-gray-100 transition disabled:opacity-50"
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Button
+              variant="ghost"
+              size="icon"
+              title={copied ? 'Copied' : 'Copy'}
+              disabled={!item.result}
+              onClick={() => copy(item.result ?? '')}
+            >
+              <Clipboard size={18} />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              title="Open SQL Editor"
+              disabled={!item.result}
+              onClick={copyAndOpenSQLTab}
+            >
+              <Link size={18} />
+            </Button>
+          </div>
+
+          <Button
+            variant="ghost"
+            size="icon"
+            title="Remove"
+            onClick={onDelete}
+            className="text-destructive hover:text-destructive"
           >
-            <Clipboard size={20} />
-          </button>
-          <button
-            title="Open SQL Editor"
-            disabled={!item.result}
-            onClick={copyAndOpenSQLTab}
-            className="text-gray-900 dark:text-gray-300 dark:hover:text-gray-100 transition disabled:opacity-50"
-          >
-            <Link size={20} />
-          </button>
+            <Trash2 size={18} />
+          </Button>
         </div>
 
-        <button
-          title="Remove"
-          className="text-red-800 hover:text-gray-100 transition"
-          onClick={onDelete}
-        >
-          <Trash2 size={20} />
-        </button>
-      </div>
-
-      <style jsx global>{`
-        .hljs-keyword,
-        .hljs-link,
-        .hljs-literal,
-        .hljs-section,
-        .hljs-selector-tag {
-          @apply text-gray-900 dark:text-gray-300;
-        }
-      `}</style>
-    </div>
+        <style jsx global>{`
+          .hljs-keyword,
+          .hljs-link,
+          .hljs-literal,
+          .hljs-section,
+          .hljs-selector-tag {
+            @apply text-foreground;
+          }
+        `}</style>
+      </CardContent>
+    </Card>
   );
 }

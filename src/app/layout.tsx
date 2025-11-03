@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import './globals.css';
 import { RootProvider } from '@/components/RootProvider';
+import { ThemeProvider } from '@/components/theme-provider';
 
 export const metadata: Metadata = {
   metadataBase: new URL(process.env.NEXT_PUBLIC_BASE_URL || 'https://supabase-schema.vercel.app'),
@@ -19,13 +20,15 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
       <body>
-        <RootProvider>
-          <main className="w-screen h-screen relative bg-white dark:bg-dark-900 text-gray-900 dark:text-white overflow-hidden">
-            {children}
-          </main>
-        </RootProvider>
+        <ThemeProvider defaultTheme="light" storageKey="theme">
+          <RootProvider>
+            <main className="w-screen h-screen relative bg-background text-foreground overflow-hidden">
+              {children}
+            </main>
+          </RootProvider>
+        </ThemeProvider>
       </body>
     </html>
   );

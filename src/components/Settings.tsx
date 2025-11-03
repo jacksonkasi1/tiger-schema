@@ -4,8 +4,8 @@ import { useState, useEffect } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import { useStore } from '@/lib/store';
 import { useLocalStorage } from '@/lib/hooks';
-import { useDark } from '@/lib/hooks';
-import { Github, Network, Bot, Settings as SettingsIcon, Moon } from 'lucide-react';
+import { useTheme } from '@/components/theme-provider';
+import { Github, Network, Bot, Settings as SettingsIcon, Moon, Sun } from 'lucide-react';
 import Image from 'next/image';
 import {
   Sheet,
@@ -33,7 +33,11 @@ export function Settings({ setIsFetching }: SettingsProps) {
   const [open, setOpen] = useState(false);
   const [isAINew, setIsAINew] = useLocalStorage('is-ai-new', true);
   const [, setDefinitions] = useLocalStorage<any>('definitions', {});
-  const { toggleDark } = useDark();
+  const { setTheme, isDark } = useTheme();
+
+  const toggleTheme = () => {
+    setTheme(isDark ? 'light' : 'dark');
+  };
 
   // Update local state when store changes
   useEffect(() => {
@@ -227,10 +231,10 @@ export function Settings({ setIsFetching }: SettingsProps) {
         <Button
           variant="outline"
           size="icon"
-          title="Toggle Dark mode"
-          onClick={toggleDark}
+          title={isDark ? 'Switch to Light mode' : 'Switch to Dark mode'}
+          onClick={toggleTheme}
         >
-          <Moon size={20} />
+          {isDark ? <Sun size={20} /> : <Moon size={20} />}
         </Button>
       </div>
     </>
