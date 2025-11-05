@@ -50,7 +50,8 @@ function FlowCanvasInner() {
   } | null>(null);
 
   // Connection mode with localStorage persistence
-  const [connectionMode, setConnectionMode] = useState<'strict' | 'flexible'>(() => {
+  // Note: setConnectionMode is reserved for future use (connection mode toggle UI)
+  const [connectionMode, _setConnectionMode] = useState<'strict' | 'flexible'>(() => {
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem('connection-mode');
       return (saved as 'strict' | 'flexible') || 'strict';
@@ -262,7 +263,7 @@ function FlowCanvasInner() {
 
   // Validate connections based on connection mode
   const isValidConnection = useCallback(
-    (connection: Connection) => {
+    (connection: Edge | Connection) => {
       // Always prevent self-connections
       if (connection.source === connection.target) {
         toast.error('Cannot connect to self', {
