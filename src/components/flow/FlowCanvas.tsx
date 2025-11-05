@@ -16,15 +16,17 @@ import {
 import '@xyflow/react/dist/style.css';
 import { useStore } from '@/lib/store';
 import { TableNode } from './TableNode';
+import { ViewNode } from './ViewNode';
 import { CustomEdge } from './CustomEdge';
 import { RelationshipSelector } from './RelationshipSelector';
+import { ContextMenu, createNodeContextMenu, createEdgeContextMenu } from './ContextMenu';
 import { tablesToNodes, tablesToEdges } from '@/lib/flow-utils';
 import { getLayoutedNodes } from '@/lib/layout';
 import { RelationshipType } from '@/types/flow';
 
 const nodeTypes = {
   table: TableNode,
-  view: TableNode,
+  view: ViewNode,
 };
 
 const edgeTypes = {
@@ -36,6 +38,14 @@ function FlowCanvasInner() {
   const [nodes, setNodes, onNodesChange] = useNodesState<any>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<any>([]);
   const [selectedEdge, setSelectedEdge] = useState<{id: string; type: RelationshipType; position: {x: number; y: number}} | null>(null);
+  const [contextMenu, setContextMenu] = useState<{
+    type: 'node' | 'edge';
+    x: number;
+    y: number;
+    nodeId?: string;
+    edgeId?: string;
+    isView?: boolean;
+  } | null>(null);
   const { fitView, zoomIn, zoomOut, getZoom } = useReactFlow();
 
   // Convert tables to nodes and edges when tables change
@@ -114,6 +124,71 @@ function FlowCanvasInner() {
     window.dispatchEvent(new CustomEvent('reactflow:zoom', { detail: { zoom } }));
   }, [getZoom]);
 
+  // Keyboard shortcuts
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
+      const cmdOrCtrl = isMac ? event.metaKey : event.ctrlKey;
+
+      // Ctrl/Cmd + A: Select all nodes
+      if (cmdOrCtrl && event.key === 'a') {
+        event.preventDefault();
+        setNodes((nds) =>
+          nds.map((node) => ({
+            ...node,
+            selected: true,
+          }))
+        );
+      }
+
+      // Delete: Remove selected nodes
+      if (event.key === 'Delete' || event.key === 'Backspace') {
+        const hasSelection = nodes.some((node) => node.selected);
+        if (hasSelection) {
+          event.preventDefault();
+          const selectedNodeIds = nodes
+            .filter((node) => node.selected)
+            .map((node) => node.id);
+
+          // Remove selected nodes
+          setNodes((nds) => nds.filter((node) => !node.selected));
+
+          // Remove edges connected to deleted nodes
+          setEdges((eds) =>
+            eds.filter(
+              (edge) =>
+                !selectedNodeIds.includes(edge.source) &&
+                !selectedNodeIds.includes(edge.target)
+            )
+          );
+        }
+      }
+
+      // Space: Fit view
+      if (event.code === 'Space' && !event.target) {
+        event.preventDefault();
+        fitView({ padding: 0.2, duration: 400 });
+      }
+
+      // Escape: Clear selection
+      if (event.key === 'Escape') {
+        setNodes((nds) =>
+          nds.map((node) => ({
+            ...node,
+            selected: false,
+          }))
+        );
+        setSelectedEdge(null);
+        setHighlightedEdges(new Set());
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [nodes, setNodes, setEdges, fitView]);
+
   // Handle node drag end to sync position back to store
   const onNodeDragStop = useCallback(
     (_event: any, node: any) => {
@@ -156,7 +231,38 @@ function FlowCanvasInner() {
   const onPaneClick = useCallback(() => {
     setHighlightedEdges(new Set());
     setSelectedEdge(null);
+    setContextMenu(null);
   }, []);
+
+  // Handle node context menu (right-click)
+  const onNodeContextMenu = useCallback(
+    (event: React.MouseEvent, node: any) => {
+      event.preventDefault();
+      const isView = node.type === 'view';
+      setContextMenu({
+        type: 'node',
+        x: event.clientX,
+        y: event.clientY,
+        nodeId: node.id,
+        isView,
+      });
+    },
+    []
+  );
+
+  // Handle edge context menu (right-click)
+  const onEdgeContextMenu = useCallback(
+    (event: React.MouseEvent, edge: Edge) => {
+      event.preventDefault();
+      setContextMenu({
+        type: 'edge',
+        x: event.clientX,
+        y: event.clientY,
+        edgeId: edge.id,
+      });
+    },
+    []
+  );
 
   // Handle edge click to show relationship selector
   const onEdgeClick = useCallback(
@@ -207,6 +313,69 @@ function FlowCanvasInner() {
     }
   }, [selectedEdge, setEdges]);
 
+  // Context menu actions
+  const handleNodeDelete = useCallback(
+    (nodeId: string) => {
+      setNodes((nds) => nds.filter((node) => node.id !== nodeId));
+      setEdges((eds) =>
+        eds.filter((edge) => edge.source !== nodeId && edge.target !== nodeId)
+      );
+    },
+    [setNodes, setEdges]
+  );
+
+  const handleCopyNodeId = useCallback((nodeId: string) => {
+    navigator.clipboard.writeText(nodeId);
+  }, []);
+
+  const handleFocusNode = useCallback(
+    (nodeId: string) => {
+      const node = nodes.find((n) => n.id === nodeId);
+      if (node) {
+        fitView({
+          padding: 0.2,
+          duration: 400,
+          nodes: [node],
+        });
+      }
+    },
+    [nodes, fitView]
+  );
+
+  const handleHideNode = useCallback(
+    (nodeId: string) => {
+      setNodes((nds) =>
+        nds.map((node) =>
+          node.id === nodeId ? { ...node, hidden: true } : node
+        )
+      );
+    },
+    [setNodes]
+  );
+
+  const handleEdgeDeleteFromMenu = useCallback(
+    (edgeId: string) => {
+      setEdges((eds) => eds.filter((edge) => edge.id !== edgeId));
+    },
+    [setEdges]
+  );
+
+  const handleChangeEdgeType = useCallback(
+    (edgeId: string) => {
+      const edge = edges.find((e) => e.id === edgeId);
+      if (edge) {
+        const relationshipType = getEdgeRelationship(edge.id);
+        setSelectedEdge({
+          id: edge.id,
+          type: relationshipType,
+          position: contextMenu ? { x: contextMenu.x, y: contextMenu.y } : { x: 0, y: 0 },
+        });
+      }
+      setContextMenu(null);
+    },
+    [edges, getEdgeRelationship, contextMenu]
+  );
+
   // Apply highlighting to edges
   const edgesWithHighlight = useMemo(() => {
     return edges.map((edge) => ({
@@ -230,6 +399,8 @@ function FlowCanvasInner() {
         onEdgeClick={onEdgeClick}
         onPaneClick={onPaneClick}
         onMove={onMove}
+        onNodeContextMenu={onNodeContextMenu}
+        onEdgeContextMenu={onEdgeContextMenu}
         nodeTypes={nodeTypes}
         edgeTypes={edgeTypes}
         fitView
@@ -256,6 +427,36 @@ function FlowCanvasInner() {
           position={selectedEdge.position}
           onClose={() => setSelectedEdge(null)}
           onDelete={handleEdgeDelete}
+        />
+      )}
+
+      {/* Context Menu */}
+      {contextMenu && contextMenu.type === 'node' && contextMenu.nodeId && (
+        <ContextMenu
+          x={contextMenu.x}
+          y={contextMenu.y}
+          items={createNodeContextMenu(
+            contextMenu.nodeId,
+            contextMenu.isView || false,
+            () => handleNodeDelete(contextMenu.nodeId!),
+            () => handleCopyNodeId(contextMenu.nodeId!),
+            () => handleFocusNode(contextMenu.nodeId!),
+            () => handleHideNode(contextMenu.nodeId!)
+          )}
+          onClose={() => setContextMenu(null)}
+        />
+      )}
+
+      {contextMenu && contextMenu.type === 'edge' && contextMenu.edgeId && (
+        <ContextMenu
+          x={contextMenu.x}
+          y={contextMenu.y}
+          items={createEdgeContextMenu(
+            contextMenu.edgeId,
+            () => handleEdgeDeleteFromMenu(contextMenu.edgeId!),
+            () => handleChangeEdgeType(contextMenu.edgeId!)
+          )}
+          onClose={() => setContextMenu(null)}
         />
       )}
     </div>

@@ -212,12 +212,13 @@ Phase 3 focuses on migrating from custom SVG-based schema visualization to React
 ## Progress Tracking
 
 **Phase 3 Started:** 2025-11-05
-**Expected Completion:** In Progress
-**Status:** Core Implementation Complete
+**Phase 3 Completed:** 2025-11-05
+**Status:** ✅ COMPLETE
 
 ### Completed ✅
 - ✅ Install ReactFlow dependencies (`@xyflow/react`, `@dagrejs/dagre`)
 - ✅ Create custom TableNode component with handles
+- ✅ Create custom ViewNode component for database views
 - ✅ Create FlowCanvas component with controls, minimap, background
 - ✅ Implement data conversion utilities (tables → nodes/edges)
 - ✅ Implement dagre auto-layout with TB/LR directions
@@ -226,6 +227,10 @@ Phase 3 focuses on migrating from custom SVG-based schema visualization to React
 - ✅ Add target handles to ALL columns (not just PKs)
 - ✅ Implement edge highlighting on node selection
 - ✅ Add layout controls and fit-to-view
+- ✅ Add keyboard shortcuts (Ctrl/Cmd+A, Delete, Space, Escape)
+- ✅ Implement right-click context menu for nodes and edges
+- ✅ Update screenshot functionality for ReactFlow
+- ✅ Edge relationship selector (one-to-many, one-to-one, many-to-many)
 
 ### In Progress 🚧
 - None
@@ -261,6 +266,39 @@ Foreign key connector lines were attaching to node centers/bounding boxes instea
 ✅ Edges now connect precisely to the correct columns
 ✅ Multiple columns with same name across tables work correctly
 ✅ Handle positioning is stable and accurate
+
+### ViewNode Component & Additional Features (2025-11-05)
+
+**New Features Added:**
+1. **ViewNode Component** - Dedicated component for database views
+   - Purple-themed styling to distinguish from tables
+   - Newspaper icon indicator
+   - Consistent handle positioning with tables
+
+2. **Keyboard Shortcuts**
+   - `Ctrl/Cmd + A`: Select all nodes
+   - `Delete/Backspace`: Remove selected nodes and connected edges
+   - `Space`: Fit view to canvas
+   - `Escape`: Clear selection and close menus
+
+3. **Context Menu**
+   - Right-click on nodes: Focus, Copy ID, Hide, Delete
+   - Right-click on edges: Change relationship type, Delete
+   - Clean UI with icons and hover effects
+
+4. **Enhanced Screenshot**
+   - Improved dark mode detection
+   - Filter out minimap and controls
+   - Fallback mechanism for reliability
+   - Higher quality with 2x pixel ratio
+
+**Files Created:**
+- `src/components/flow/ViewNode.tsx`: Dedicated view node component
+- `src/components/flow/ContextMenu.tsx`: Reusable context menu component
+
+**Files Modified:**
+- `src/components/flow/FlowCanvas.tsx`: Added keyboard shortcuts, context menu handlers
+- `src/components/Helper.tsx`: Enhanced screenshot functionality
 
 ---
 
