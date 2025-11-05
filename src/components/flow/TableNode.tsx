@@ -10,25 +10,6 @@ function TableNodeComponent({ data, selected, id }: NodeProps) {
   const tableData = data as unknown as TableNodeData;
   const tableName = id; // Node ID is the table name
 
-  // Common handle styling - larger and centered on border
-  const handleClassName = (side: 'left' | 'right') => cn(
-    // Size: 20px for better visibility and clickability
-    '!w-5 !h-5',
-    // Positioning: centered on border (50% inside, 50% outside)
-    side === 'left' ? '!-left-2.5' : '!-right-2.5',
-    // Colors and borders
-    '!border-2 !border-white dark:!border-dark-700',
-    // Visibility: always show on hover/select, subtle otherwise
-    'transition-all duration-200',
-    selected
-      ? '!opacity-100 !scale-110'
-      : '!opacity-60 hover:!opacity-100 hover:!scale-105',
-    // Rounded
-    '!rounded-full',
-    // Cursor
-    '!cursor-crosshair'
-  );
-
   return (
     <div
       className={cn(
@@ -55,57 +36,34 @@ function TableNodeComponent({ data, selected, id }: NodeProps) {
       {/* Columns */}
       <div className="pb-2">
         {tableData.columns?.map((col) => {
-          // Create unique handle IDs for left and right sides
-          const leftHandleId = `${tableName}_${col.title}_left`;
-          const rightHandleId = `${tableName}_${col.title}_right`;
-
-          // Determine handle colors based on column properties
-          const handleColor = col.pk
-            ? '!bg-blue-500'
-            : col.fk
-            ? '!bg-green-500'
-            : '!bg-purple-500';
+          // Create unique handle ID: tableName_columnName
+          const handleId = `${tableName}_${col.title}`;
 
           return (
             <div key={col.title} className="relative">
-              {/* LEFT SIDE HANDLES - Both source and target */}
-              <Handle
-                type="source"
-                position={Position.Left}
-                id={leftHandleId}
-                className={cn(handleClassName('left'), handleColor)}
-                style={{
-                  top: '50%',
-                  transform: 'translateY(-50%)',
-                }}
-              />
-              <Handle
-                type="target"
-                position={Position.Left}
-                id={leftHandleId}
-                className={cn(handleClassName('left'), handleColor)}
-                style={{
-                  top: '50%',
-                  transform: 'translateY(-50%)',
-                }}
-              />
+              {/* Source Handle (right side) - for FK connections going out */}
+              {col.fk && (
+                <Handle
+                  type="source"
+                  position={Position.Right}
+                  id={handleId}
+                  className="!w-3 !h-3 !bg-green-500 !border-2 !border-white dark:!border-dark-700"
+                  style={{
+                    top: '50%',
+                    transform: 'translateY(-50%)',
+                  }}
+                />
+              )}
 
-              {/* RIGHT SIDE HANDLES - Both source and target */}
-              <Handle
-                type="source"
-                position={Position.Right}
-                id={rightHandleId}
-                className={cn(handleClassName('right'), handleColor)}
-                style={{
-                  top: '50%',
-                  transform: 'translateY(-50%)',
-                }}
-              />
+              {/* Target Handle (left side) - ALL columns can receive connections */}
               <Handle
                 type="target"
-                position={Position.Right}
-                id={rightHandleId}
-                className={cn(handleClassName('right'), handleColor)}
+                position={Position.Left}
+                id={handleId}
+                className={cn(
+                  '!w-3 !h-3 !border-2 !border-white dark:!border-dark-700',
+                  col.pk ? '!bg-blue-500' : '!bg-gray-400'
+                )}
                 style={{
                   top: '50%',
                   transform: 'translateY(-50%)',

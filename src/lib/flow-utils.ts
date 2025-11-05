@@ -38,11 +38,9 @@ export function tablesToEdges(tables: TableState): FlowEdge[] {
         if (targetTable && targetColumn) {
           const edgeId = `${table.title}.${column.title}-${targetTable}.${targetColumn}`;
 
-          // Create unique handle IDs matching TableNode format: tableName_columnName_side
-          // Default: source from right side (FK column), target to left side (PK column)
-          // This creates natural left-to-right flow for relationships
-          const sourceHandleId = `${table.title}_${column.title}_right`;
-          const targetHandleId = `${targetTable}_${targetColumn}_left`;
+          // Create unique handle IDs matching TableNode format: tableName_columnName
+          const sourceHandleId = `${table.title}_${column.title}`;
+          const targetHandleId = `${targetTable}_${targetColumn}`;
 
           edges.push({
             id: edgeId,
