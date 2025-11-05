@@ -44,19 +44,29 @@ export function Helper({ onChatOpen, isChatOpen = false }: HelperProps) {
   };
 
   const screenshot = () => {
-    // Target the ReactFlow container
-    const el = document.querySelector('.react-flow') as HTMLElement;
+    // Target the ReactFlow viewport (the part with nodes and edges)
+    const el = document.querySelector('.react-flow__viewport') as HTMLElement;
 
     if (!el) {
-      console.error('ReactFlow container not found');
+      console.error('ReactFlow viewport not found');
       return;
     }
+
+    // Get the parent react-flow element for background color
+    const reactFlowEl = document.querySelector('.react-flow') as HTMLElement;
+    const isDarkMode = reactFlowEl?.classList.contains('dark:bg-dark-900');
 
     toPng(el, {
       skipFonts: true,
       cacheBust: true,
       pixelRatio: 2,
-      backgroundColor: '#ffffff',
+      backgroundColor: isDarkMode ? '#1a1a1a' : '#ffffff',
+      // Include all child nodes
+      filter: (node) => {
+        // Exclude minimap and controls from screenshot
+        return !node.classList?.contains('react-flow__minimap') &&
+               !node.classList?.contains('react-flow__controls');
+      },
     })
       .then((dataUrl) => {
         const link = document.createElement('a');
@@ -66,6 +76,25 @@ export function Helper({ onChatOpen, isChatOpen = false }: HelperProps) {
       })
       .catch((error) => {
         console.error('Error taking screenshot:', error);
+
+        // Fallback: capture the entire ReactFlow container
+        if (reactFlowEl) {
+          toPng(reactFlowEl, {
+            skipFonts: true,
+            cacheBust: true,
+            pixelRatio: 2,
+            backgroundColor: isDarkMode ? '#1a1a1a' : '#ffffff',
+          })
+            .then((dataUrl) => {
+              const link = document.createElement('a');
+              link.download = 'Supabase Schema.png';
+              link.href = dataUrl;
+              link.click();
+            })
+            .catch((err) => {
+              console.error('Fallback screenshot also failed:', err);
+            });
+        }
       });
   };
 
