@@ -15,6 +15,12 @@ interface AppState {
   updateTablePosition: (tableId: string, x: number, y: number) => void;
   autoArrange: () => void;
 
+  // Layout trigger for ReactFlow
+  layoutTrigger: number;
+  triggerLayout: () => void;
+  fitViewTrigger: number;
+  triggerFitView: () => void;
+
   // Selection and highlighting
   tableSelected: Set<Element>;
   setTableSelected: (selected: Set<Element>) => void;
@@ -69,6 +75,8 @@ export const useStore = create<AppState>((set, get) => ({
     last_url: '',
   },
   edgeRelationships: {},
+  layoutTrigger: 0,
+  fitViewTrigger: 0,
 
   // Actions
   setIsModalOpen: (open) => set({ isModalOpen: open }),
@@ -124,57 +132,16 @@ export const useStore = create<AppState>((set, get) => ({
   },
 
   autoArrange: () => {
-    const gap = 250;
-    const column = 3;
-    const minWidth: number[] = [];
-    const minHeight: number[] = [];
-    const nodeList: NodeListOf<HTMLElement> = document.querySelectorAll(
-      '#canvas-children > div'
-    );
+    // Trigger layout in ReactFlow
+    set((state) => ({ layoutTrigger: state.layoutTrigger + 1 }));
+  },
 
-    nodeList.forEach((el, index) => {
-      if (minWidth[index % column]) {
-        if (!(minWidth[index % column] < el.offsetWidth)) {
-          minWidth[index % column] = minWidth[index % column];
-        }
-      } else {
-        minWidth[index % column] = el.offsetWidth;
-      }
+  triggerLayout: () => {
+    set((state) => ({ layoutTrigger: state.layoutTrigger + 1 }));
+  },
 
-      if (minHeight[Math.floor(index / column)]) {
-        if (!(minHeight[Math.floor(index / column)] < el.offsetHeight)) {
-          minHeight[Math.floor(index / column)] = minHeight[Math.floor(index / column)];
-        }
-      } else {
-        minHeight[Math.floor(index / column)] = el.offsetHeight;
-      }
-    });
-
-    minWidth.unshift(0);
-    minHeight.unshift(0);
-
-    const setLeft = minWidth.map((_, index) =>
-      minWidth.slice(0, index + 1).reduce((a, b) => a + b + gap)
-    );
-    const setTop = minHeight.map((_, index) =>
-      minHeight.slice(0, index + 1).reduce((a, b) => a + b + gap)
-    );
-
-    const newTables = { ...get().tables };
-    nodeList.forEach((el, index) => {
-      if (newTables[el.id]) {
-        newTables[el.id] = {
-          ...newTables[el.id],
-          position: {
-            x: setLeft[index % column],
-            y: setTop[Math.floor(index / column)],
-          },
-        };
-      }
-    });
-
-    set({ tables: newTables });
-    get().saveToLocalStorage();
+  triggerFitView: () => {
+    set((state) => ({ fitViewTrigger: state.fitViewTrigger + 1 }));
   },
 
   setTableSelected: (selected) => set({ tableSelected: selected }),

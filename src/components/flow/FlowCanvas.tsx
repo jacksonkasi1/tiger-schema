@@ -11,6 +11,7 @@ import {
   Connection,
   ReactFlowProvider,
   Edge,
+  useReactFlow,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { useStore } from '@/lib/store';
@@ -18,6 +19,7 @@ import { TableNode } from './TableNode';
 import { CustomEdge } from './CustomEdge';
 import { RelationshipSelector } from './RelationshipSelector';
 import { tablesToNodes, tablesToEdges } from '@/lib/flow-utils';
+import { getLayoutedNodes } from '@/lib/layout';
 import { RelationshipType } from '@/types/flow';
 
 const nodeTypes = {
@@ -30,10 +32,11 @@ const edgeTypes = {
 };
 
 function FlowCanvasInner() {
-  const { tables, updateTablePosition, getEdgeRelationship, setEdgeRelationship } = useStore();
+  const { tables, updateTablePosition, getEdgeRelationship, setEdgeRelationship, layoutTrigger, fitViewTrigger } = useStore();
   const [nodes, setNodes, onNodesChange] = useNodesState<any>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<any>([]);
   const [selectedEdge, setSelectedEdge] = useState<{id: string; type: RelationshipType; position: {x: number; y: number}} | null>(null);
+  const { fitView } = useReactFlow();
 
   // Convert tables to nodes and edges when tables change
   useEffect(() => {
@@ -49,6 +52,31 @@ function FlowCanvasInner() {
     setNodes(flowNodes);
     setEdges(flowEdges);
   }, [tables, setNodes, setEdges, getEdgeRelationship]);
+
+  // Listen for layout trigger from store
+  useEffect(() => {
+    if (layoutTrigger > 0 && nodes.length > 0 && edges.length > 0) {
+      const layoutedNodes = getLayoutedNodes(nodes, edges, { direction: 'TB' });
+      setNodes(layoutedNodes);
+
+      // Update positions in store
+      layoutedNodes.forEach((node) => {
+        updateTablePosition(node.id, node.position.x, node.position.y);
+      });
+
+      // Fit view after layout
+      setTimeout(() => {
+        fitView({ padding: 0.2, duration: 400 });
+      }, 50);
+    }
+  }, [layoutTrigger]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Listen for fit view trigger from store
+  useEffect(() => {
+    if (fitViewTrigger > 0) {
+      fitView({ padding: 0.2, duration: 400 });
+    }
+  }, [fitViewTrigger, fitView]);
 
   // Handle node drag end to sync position back to store
   const onNodeDragStop = useCallback(
