@@ -158,6 +158,14 @@ function FlowCanvasInner() {
     [selectedEdge, setEdgeRelationship, setEdges]
   );
 
+  // Handle edge deletion
+  const handleEdgeDelete = useCallback(() => {
+    if (selectedEdge) {
+      setEdges((eds) => eds.filter((edge) => edge.id !== selectedEdge.id));
+      setSelectedEdge(null);
+    }
+  }, [selectedEdge, setEdges]);
+
   // Apply highlighting to edges
   const edgesWithHighlight = useMemo(() => {
     return edges.map((edge) => ({
@@ -236,6 +244,7 @@ function FlowCanvasInner() {
           onSelect={handleRelationshipChange}
           position={selectedEdge.position}
           onClose={() => setSelectedEdge(null)}
+          onDelete={handleEdgeDelete}
         />
       )}
     </div>

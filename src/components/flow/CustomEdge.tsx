@@ -3,7 +3,7 @@
 import { memo } from 'react';
 import {
   EdgeProps,
-  getBezierPath,
+  getSmoothStepPath,
   EdgeLabelRenderer,
   BaseEdge,
 } from '@xyflow/react';
@@ -26,7 +26,7 @@ function CustomEdgeComponent({
   const relationshipType: RelationshipType = (data?.relationshipType as RelationshipType) || 'one-to-many';
   const relationshipInfo = getRelationshipInfo(relationshipType);
 
-  const [edgePath, labelX, labelY] = getBezierPath({
+  const [edgePath, labelX, labelY] = getSmoothStepPath({
     sourceX,
     sourceY,
     sourcePosition,
