@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import './globals.css';
 import { RootProvider } from '@/components/RootProvider';
 import { ThemeProvider } from '@/components/theme-provider';
+import { Toaster } from 'sonner';
 
 export const metadata: Metadata = {
   metadataBase: new URL(process.env.NEXT_PUBLIC_BASE_URL || 'https://supabase-schema.vercel.app'),
@@ -27,6 +28,7 @@ export default function RootLayout({
             <main className="w-screen h-screen relative bg-background text-foreground overflow-hidden">
               {children}
             </main>
+            <Toaster richColors closeButton />
           </RootProvider>
         </ThemeProvider>
       </body>
