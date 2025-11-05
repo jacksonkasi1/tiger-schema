@@ -24,6 +24,7 @@ import { tablesToNodes, tablesToEdges } from '@/lib/flow-utils';
 import { getLayoutedNodes } from '@/lib/layout';
 import { RelationshipType } from '@/types/flow';
 import { MarkerType } from '@xyflow/react';
+import { toast } from 'sonner';
 
 const nodeTypes = {
   table: TableNode,
@@ -47,7 +48,23 @@ function FlowCanvasInner() {
     edgeId?: string;
     isView?: boolean;
   } | null>(null);
-  const connectionMode = 'strict'; // Always use strict mode for now
+
+  // Connection mode with localStorage persistence
+  const [connectionMode, setConnectionMode] = useState<'strict' | 'flexible'>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('connection-mode');
+      return (saved as 'strict' | 'flexible') || 'strict';
+    }
+    return 'strict';
+  });
+
+  // Save connection mode to localStorage when it changes
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('connection-mode', connectionMode);
+    }
+  }, [connectionMode]);
+
   const { fitView, zoomIn, zoomOut, getZoom } = useReactFlow();
 
   // Convert tables to nodes and edges when tables change
@@ -248,6 +265,11 @@ function FlowCanvasInner() {
     (connection: Connection) => {
       // Always prevent self-connections
       if (connection.source === connection.target) {
+        toast.error('Cannot connect to self', {
+          description: 'A table cannot have a relationship with itself',
+          position: 'bottom-center',
+          duration: 2000,
+        });
         return false;
       }
 
@@ -269,8 +291,19 @@ function FlowCanvasInner() {
         return handleId === sourceHandleId;
       });
 
+      const isForeignKey = sourceColumn?.fk !== undefined;
+
+      // Show toast notification if connection is invalid
+      if (!isForeignKey) {
+        toast.error('Only foreign keys can create connections', {
+          description: 'In strict mode, only FK columns (green handles) can start connections',
+          position: 'bottom-center',
+          duration: 2500,
+        });
+      }
+
       // Only allow connection if source column is a FK
-      return sourceColumn?.fk !== undefined;
+      return isForeignKey;
     },
     [connectionMode, nodes]
   );
