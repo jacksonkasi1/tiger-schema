@@ -12,6 +12,8 @@ import {
   ReactFlowProvider,
   Edge,
   useReactFlow,
+  ConnectionLineType,
+  ConnectionMode,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { useStore } from '@/lib/store';
@@ -239,6 +241,8 @@ function FlowCanvasInner() {
           type: 'custom',
           animated: false,
         }}
+        connectionLineType={ConnectionLineType.SmoothStep}
+        connectionMode={ConnectionMode.Loose}
         className="bg-white dark:bg-dark-900"
       >
         <Background className="dark:opacity-20" />
