@@ -47,6 +47,7 @@ function FlowCanvasInner() {
     edgeId?: string;
     isView?: boolean;
   } | null>(null);
+  const [connectionMode, setConnectionMode] = useState<'strict' | 'flexible'>('strict');
   const { fitView, zoomIn, zoomOut, getZoom } = useReactFlow();
 
   // Convert tables to nodes and edges when tables change
@@ -242,6 +243,38 @@ function FlowCanvasInner() {
     [setEdges]
   );
 
+  // Validate connections based on connection mode
+  const isValidConnection = useCallback(
+    (connection: Connection) => {
+      // Always prevent self-connections
+      if (connection.source === connection.target) {
+        return false;
+      }
+
+      if (connectionMode === 'flexible') {
+        // In flexible mode, allow any valid source → target connection
+        return true;
+      }
+
+      // Strict mode: only FK columns can start connections
+      const sourceNode = nodes.find((n) => n.id === connection.source);
+      if (!sourceNode) return false;
+
+      const sourceHandleId = connection.sourceHandle;
+      if (!sourceHandleId) return false;
+
+      // Check if source handle is a FK column
+      const sourceColumn = sourceNode.data.columns?.find((_col: any, index: number) => {
+        const handleId = `${sourceNode.id}_${_col.title}_${index}`;
+        return handleId === sourceHandleId;
+      });
+
+      // Only allow connection if source column is a FK
+      return sourceColumn?.fk !== undefined;
+    },
+    [connectionMode, nodes]
+  );
+
   // Highlight connected edges on node selection
   const [highlightedEdges, setHighlightedEdges] = useState<Set<string>>(
     new Set()
@@ -432,6 +465,7 @@ function FlowCanvasInner() {
         onNodeDragStop={onNodeDragStop}
         onNodesDelete={onNodesDelete}
         onConnect={onConnect}
+        isValidConnection={isValidConnection}
         onNodeClick={onNodeClick}
         onEdgeClick={onEdgeClick}
         onPaneClick={onPaneClick}
@@ -455,6 +489,28 @@ function FlowCanvasInner() {
           nodeClassName="!fill-warm-gray-300 dark:!fill-dark-700"
         />
       </ReactFlow>
+
+      {/* Connection Mode Toggle */}
+      <div className="absolute top-4 right-20 z-10">
+        <button
+          onClick={() => setConnectionMode((mode) => (mode === 'strict' ? 'flexible' : 'strict'))}
+          className={cn(
+            'px-3 py-2 rounded-md text-sm font-medium shadow-md transition-all',
+            'flex items-center gap-2',
+            connectionMode === 'strict'
+              ? 'bg-blue-500 text-white hover:bg-blue-600'
+              : 'bg-green-500 text-white hover:bg-green-600'
+          )}
+          title={
+            connectionMode === 'strict'
+              ? 'Strict Mode: Only FK columns can start connections'
+              : 'Flexible Mode: Any column can start connections'
+          }
+        >
+          <span>{connectionMode === 'strict' ? '🔒' : '🔓'}</span>
+          <span>{connectionMode === 'strict' ? 'Strict' : 'Flexible'}</span>
+        </button>
+      </div>
 
       {/* Relationship Selector */}
       {selectedEdge && (
