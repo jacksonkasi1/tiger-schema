@@ -1,7 +1,199 @@
+# Postgres Schema Visualization - TODO
+
+## Current Status
+**Phase 3 (ReactFlow Integration):** ✅ COMPLETE
+**Phase 4 (Advanced Features):** 🚧 IN PROGRESS
+
+---
+
+# Phase 4: Advanced Features - TODO
+
+## Overview
+Phase 4 focuses on enhancing the schema visualization with professional features including organization, filtering, querying, and collaboration capabilities.
+
+---
+
+## Pending Tasks
+
+### 🔴 Critical (Foundation)
+- [ ] **Table grouping by schema**
+  - Visual schema grouping with colored boundaries
+  - Collapsible schema groups
+  - Schema-based filtering
+  - Group positioning and layout
+  - Settings to show/hide schemas
+
+### 🟡 High Priority (Core Features)
+- [ ] **Relationship filtering**
+  - Toggle visibility of FK connections
+  - Filter by relationship type (one-to-one, one-to-many, many-to-many)
+  - Hide/show all edges
+  - Filter by source/target table
+  - Visual indicators for hidden relationships
+
+- [ ] **Search and filter tables**
+  - Global search bar component
+  - Search by table/view name
+  - Search by column name
+  - Filter by table type (table/view)
+  - Highlight search results
+  - Jump to table feature
+  - Recent searches history
+
+### 🟢 Medium Priority (Advanced Features)
+- [ ] **SQL query builder from diagram**
+  - Visual query builder UI
+  - SELECT query generation from node selection
+  - JOIN detection from FK relationships
+  - WHERE clause builder
+  - Export query as SQL
+  - Execute query (with connection)
+  - Query history
+
+- [ ] **Version comparison**
+  - Schema snapshot functionality
+  - Compare two schema versions
+  - Highlight differences (added/removed/modified)
+  - Migration script generation
+  - Version history timeline
+  - Import/export schema versions
+
+### 🔵 Low Priority (Collaboration)
+- [ ] **Collaborative editing**
+  - Real-time cursor tracking
+  - Multi-user presence indicators
+  - Shared canvas state
+  - Conflict resolution
+  - WebSocket/WebRTC integration
+  - User permissions system
+  - Activity feed
+
+---
+
+## Implementation Order
+
+### Step 1: Table Grouping (Week 1)
+1. Detect schema information from table metadata
+2. Create schema grouping UI component
+3. Implement collapsible groups
+4. Update layout algorithm for grouped tables
+5. Add schema filter controls
+
+### Step 2: Search & Filtering (Week 2)
+1. Create search bar component
+2. Implement search functionality
+3. Add highlight and focus features
+4. Create relationship filter controls
+5. Implement edge visibility toggling
+
+### Step 3: Query Builder (Week 3-4)
+1. Design query builder UI
+2. Implement node-to-query conversion
+3. Add JOIN detection logic
+4. Create query preview panel
+5. Add export functionality
+6. (Optional) Database connection for execution
+
+### Step 4: Version Comparison (Week 5)
+1. Design schema snapshot format
+2. Implement snapshot save/load
+3. Create comparison algorithm
+4. Build diff visualization UI
+5. Add migration script generator
+
+### Step 5: Collaboration (Week 6+)
+1. Research collaboration architecture
+2. Set up WebSocket/WebRTC backend
+3. Implement presence system
+4. Add real-time sync
+5. Create permissions and access control
+
+---
+
+## Files to Create/Modify
+
+### New Files (Phase 4)
+- `/src/components/search/SearchBar.tsx` - Global search component
+- `/src/components/search/FilterPanel.tsx` - Advanced filtering
+- `/src/components/grouping/SchemaGroup.tsx` - Schema boundary component
+- `/src/components/query/QueryBuilder.tsx` - Visual query builder
+- `/src/components/query/QueryPanel.tsx` - Query preview and export
+- `/src/components/version/VersionCompare.tsx` - Schema diff viewer
+- `/src/components/collab/Presence.tsx` - User presence indicators
+- `/src/lib/query-builder.ts` - Query generation utilities
+- `/src/lib/schema-diff.ts` - Version comparison logic
+- `/src/types/query.ts` - Query builder types
+- `/src/types/version.ts` - Version control types
+
+### Modified Files
+- `/src/components/flow/FlowCanvas.tsx` - Add search, filters, grouping
+- `/src/lib/store.ts` - Add Phase 4 state management
+- `/src/components/Sidebar.tsx` - Add Phase 4 controls
+- `/src/components/Helper.tsx` - Add query builder and version buttons
+
+---
+
+## Testing Checklist
+
+### Table Grouping
+- [ ] Tables correctly grouped by schema
+- [ ] Groups can be collapsed/expanded
+- [ ] Layout respects group boundaries
+- [ ] Filter by schema works
+- [ ] Visual styling is clear
+
+### Search & Filter
+- [ ] Search finds tables by name
+- [ ] Search finds columns by name
+- [ ] Results are highlighted
+- [ ] Relationship filtering works
+- [ ] Edge visibility toggles correctly
+
+### Query Builder
+- [ ] Generates valid SQL
+- [ ] JOINs are detected correctly
+- [ ] Complex queries work
+- [ ] Export functionality works
+- [ ] Error handling for invalid selections
+
+### Version Comparison
+- [ ] Snapshots save correctly
+- [ ] Comparison shows all differences
+- [ ] Migration scripts are valid SQL
+- [ ] Version history is maintained
+- [ ] Import/export works reliably
+
+### Collaboration
+- [ ] Multiple users can connect
+- [ ] Cursor positions sync
+- [ ] Changes sync in real-time
+- [ ] Conflicts are resolved
+- [ ] Performance with multiple users
+
+---
+
+## Progress Tracking
+
+**Phase 4 Started:** 2025-11-05
+**Status:** 🚧 IN PROGRESS
+
+### Completed ✅
+- ✅ Address code review comments (spacebar shortcut, clipboard error handling, handle ID collisions)
+
+### In Progress 🚧
+- Planning Phase 4 implementation
+
+### Blocked ⛔
+- None
+
+---
+
 # Phase 3: ReactFlow Integration - TODO
 
 ## Current Status
 Phase 3 focuses on migrating from custom SVG-based schema visualization to ReactFlow for professional features and better UX.
+
+**Status:** ✅ COMPLETE (2025-11-05)
 
 ---
 
@@ -241,6 +433,34 @@ Phase 3 focuses on migrating from custom SVG-based schema visualization to React
 ---
 
 ## Recent Fixes
+
+### Code Review Fixes - Phase 4 (2025-11-05)
+
+**Issues Addressed:**
+Three code review comments were fixed to improve code quality and reliability.
+
+**1. Spacebar Shortcut Fix**
+- **Problem:** Spacebar shortcut used incorrect `!event.target` check which could fail
+- **Solution:** Added proper input field detection checking for INPUT, TEXTAREA, and contentEditable elements
+- **File:** `src/components/flow/FlowCanvas.tsx:167-178`
+
+**2. Clipboard Error Handling**
+- **Problem:** Clipboard write operation could fail silently without error handling
+- **Solution:** Added `.catch()` handler to log clipboard access errors to console
+- **File:** `src/components/flow/FlowCanvas.tsx:334-337`
+
+**3. Handle ID Collision Prevention**
+- **Problem:** Handle IDs using only column titles could cause collisions with duplicate column names
+- **Solution:** Updated handle ID format to include column index: `tableName_columnName_index`
+- **Files:**
+  - `src/components/flow/ViewNode.tsx:36-41`
+  - `src/components/flow/TableNode.tsx:38-43`
+
+**Result:**
+✅ All code review comments resolved
+✅ More robust keyboard shortcuts
+✅ Better error visibility for clipboard operations
+✅ Unique handle IDs prevent connection issues
 
 ### FK Connector Handle Mapping Fix (2025-11-05)
 
