@@ -23,6 +23,7 @@ import { ContextMenu, createNodeContextMenu, createEdgeContextMenu } from './Con
 import { tablesToNodes, tablesToEdges } from '@/lib/flow-utils';
 import { getLayoutedNodes } from '@/lib/layout';
 import { RelationshipType } from '@/types/flow';
+import { MarkerType } from '@xyflow/react';
 
 const nodeTypes = {
   table: TableNode,
@@ -51,14 +52,35 @@ function FlowCanvasInner() {
   // Convert tables to nodes and edges when tables change
   useEffect(() => {
     const flowNodes = tablesToNodes(tables);
-    const flowEdges = tablesToEdges(tables).map((edge) => ({
-      ...edge,
-      type: 'custom',
-      data: {
-        ...edge.data,
-        relationshipType: getEdgeRelationship(edge.id),
-      },
-    }));
+    const flowEdges = tablesToEdges(tables).map((edge) => {
+      const relationshipType = getEdgeRelationship(edge.id);
+
+      // Configure markers based on relationship type
+      const markerEnd = {
+        type: MarkerType.ArrowClosed,
+        width: 20,
+        height: 20,
+        color: '#6B7280',
+      };
+
+      const markerStart = relationshipType === 'many-to-many' ? {
+        type: MarkerType.ArrowClosed,
+        width: 20,
+        height: 20,
+        color: '#6B7280',
+      } : undefined;
+
+      return {
+        ...edge,
+        type: 'custom',
+        markerEnd,
+        markerStart,
+        data: {
+          ...edge.data,
+          relationshipType,
+        },
+      };
+    });
     setNodes(flowNodes);
     setEdges(flowEdges);
   }, [tables, setNodes, setEdges, getEdgeRelationship]);
@@ -293,12 +315,18 @@ function FlowCanvasInner() {
     (type: RelationshipType) => {
       if (selectedEdge) {
         setEdgeRelationship(selectedEdge.id, type);
-        // Update the edge data immediately
+        // Update the edge data and markers immediately
         setEdges((eds) =>
           eds.map((edge) =>
             edge.id === selectedEdge.id
               ? {
                   ...edge,
+                  markerStart: type === 'many-to-many' ? {
+                    type: MarkerType.ArrowClosed,
+                    width: 20,
+                    height: 20,
+                    color: '#6B7280',
+                  } : undefined,
                   data: {
                     ...edge.data,
                     relationshipType: type,

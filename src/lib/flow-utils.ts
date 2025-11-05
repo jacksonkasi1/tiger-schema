@@ -1,5 +1,6 @@
 import { Table, TableState } from './types';
 import { FlowNode, FlowEdge } from '@/types/flow';
+import { MarkerType } from '@xyflow/react';
 
 /**
  * Convert table state to ReactFlow nodes
@@ -61,6 +62,12 @@ export function tablesToEdges(tables: TableState): FlowEdge[] {
             targetHandle: targetHandleId,
             type: 'smoothstep',
             animated: false,
+            markerEnd: {
+              type: MarkerType.ArrowClosed,
+              width: 20,
+              height: 20,
+              color: '#6B7280', // gray-500
+            },
             data: {
               sourceColumn: column.title,
               targetColumn: targetColumn,
