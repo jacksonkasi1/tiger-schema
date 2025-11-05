@@ -211,18 +211,56 @@ Phase 3 focuses on migrating from custom SVG-based schema visualization to React
 
 ## Progress Tracking
 
-**Phase 3 Started:** TBD
-**Expected Completion:** TBD
-**Status:** Not Started
+**Phase 3 Started:** 2025-11-05
+**Expected Completion:** In Progress
+**Status:** Core Implementation Complete
 
 ### Completed ✅
-- None yet
+- ✅ Install ReactFlow dependencies (`@xyflow/react`, `@dagrejs/dagre`)
+- ✅ Create custom TableNode component with handles
+- ✅ Create FlowCanvas component with controls, minimap, background
+- ✅ Implement data conversion utilities (tables → nodes/edges)
+- ✅ Implement dagre auto-layout with TB/LR directions
+- ✅ Integrate FlowCanvas into main page
+- ✅ Fix FK connector handle mapping (unique IDs per column)
+- ✅ Add target handles to ALL columns (not just PKs)
+- ✅ Implement edge highlighting on node selection
+- ✅ Add layout controls and fit-to-view
 
 ### In Progress 🚧
-- Creating plan documents
+- None
 
 ### Blocked ⛔
 - None
+
+---
+
+## Recent Fixes
+
+### FK Connector Handle Mapping Fix (2025-11-05)
+
+**Problem:**
+Foreign key connector lines were attaching to node centers/bounding boxes instead of specific column positions.
+
+**Root Cause:**
+1. Handle IDs were not unique (used `col.title` instead of `${tableName}_${col.title}`)
+2. Only PK columns had target handles, but any column can be referenced by FK
+3. Handle positioning used absolute pixels which could drift
+
+**Solution:**
+1. Changed handle IDs to `${tableName}_${columnName}` format for uniqueness
+2. Added target handles to ALL columns (PK columns = blue, others = gray)
+3. Updated edge creation to use matching handle ID format
+4. Changed handle positioning to relative (50% + translateY) for better alignment
+
+**Files Modified:**
+- `src/components/flow/TableNode.tsx`: Fixed handle ID generation and added handles to all columns
+- `src/lib/flow-utils.ts`: Updated edge creation to use unique handle IDs
+
+**Result:**
+✅ Edges now connect precisely to the correct columns
+✅ Multiple columns with same name across tables work correctly
+✅ Handle positioning is stable and accurate
 
 ---
 

@@ -38,12 +38,16 @@ export function tablesToEdges(tables: TableState): FlowEdge[] {
         if (targetTable && targetColumn) {
           const edgeId = `${table.title}.${column.title}-${targetTable}.${targetColumn}`;
 
+          // Create unique handle IDs matching TableNode format: tableName_columnName
+          const sourceHandleId = `${table.title}_${column.title}`;
+          const targetHandleId = `${targetTable}_${targetColumn}`;
+
           edges.push({
             id: edgeId,
             source: table.title,
             target: targetTable,
-            sourceHandle: column.title,
-            targetHandle: targetColumn,
+            sourceHandle: sourceHandleId,
+            targetHandle: targetHandleId,
             type: 'smoothstep',
             animated: false,
             data: {

@@ -6,8 +6,9 @@ import { Newspaper } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { TableNodeData } from '@/types/flow';
 
-function TableNodeComponent({ data, selected }: NodeProps) {
+function TableNodeComponent({ data, selected, id }: NodeProps) {
   const tableData = data as unknown as TableNodeData;
+  const tableName = id; // Node ID is the table name
 
   return (
     <div
@@ -28,49 +29,57 @@ function TableNodeComponent({ data, selected }: NodeProps) {
 
       {/* Columns */}
       <div className="pb-2">
-        {tableData.columns?.map((col, index) => (
-          <div key={col.title} className="relative">
-            {/* Source Handle (right side) - for FK connections going out */}
-            {col.fk && (
-              <Handle
-                type="source"
-                position={Position.Right}
-                id={col.title}
-                className="!w-3 !h-3 !bg-green-500 !border-2 !border-white dark:!border-dark-700"
-                style={{
-                  top: `${52 + index * 32 + 16}px`, // Header height + row offset + half row height
-                }}
-              />
-            )}
+        {tableData.columns?.map((col) => {
+          // Create unique handle ID: tableName_columnName
+          const handleId = `${tableName}_${col.title}`;
 
-            {/* Target Handle (left side) - for FK connections coming in */}
-            {col.pk && (
+          return (
+            <div key={col.title} className="relative">
+              {/* Source Handle (right side) - for FK connections going out */}
+              {col.fk && (
+                <Handle
+                  type="source"
+                  position={Position.Right}
+                  id={handleId}
+                  className="!w-3 !h-3 !bg-green-500 !border-2 !border-white dark:!border-dark-700"
+                  style={{
+                    top: '50%',
+                    transform: 'translateY(-50%)',
+                  }}
+                />
+              )}
+
+              {/* Target Handle (left side) - ALL columns can receive connections */}
               <Handle
                 type="target"
                 position={Position.Left}
-                id={col.title}
-                className="!w-3 !h-3 !bg-blue-500 !border-2 !border-white dark:!border-dark-700"
+                id={handleId}
+                className={cn(
+                  '!w-3 !h-3 !border-2 !border-white dark:!border-dark-700',
+                  col.pk ? '!bg-blue-500' : '!bg-gray-400'
+                )}
                 style={{
-                  top: `${52 + index * 32 + 16}px`,
+                  top: '50%',
+                  transform: 'translateY(-50%)',
                 }}
               />
-            )}
 
-            <div
-              className={cn(
-                'py-1 px-4 flex items-center text-dark-100 dark:text-white-800',
-                'border-l-3 border-transparent',
-                'hover:bg-warm-gray-200 dark:hover:bg-dark-600 dark:hover:text-white',
-                col.pk && 'border-green-500'
-              )}
-            >
-              <p className="flex-grow truncate">{col.title}</p>
-              <p className="ml-4 flex-shrink-0 text-sm text-white-900">
-                {col.format}
-              </p>
+              <div
+                className={cn(
+                  'py-1 px-4 flex items-center text-dark-100 dark:text-white-800',
+                  'border-l-3 border-transparent',
+                  'hover:bg-warm-gray-200 dark:hover:bg-dark-600 dark:hover:text-white',
+                  col.pk && 'border-green-500'
+                )}
+              >
+                <p className="flex-grow truncate">{col.title}</p>
+                <p className="ml-4 flex-shrink-0 text-sm text-white-900">
+                  {col.format}
+                </p>
+              </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );
