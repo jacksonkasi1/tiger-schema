@@ -20,6 +20,10 @@ interface AppState {
   triggerLayout: () => void;
   fitViewTrigger: number;
   triggerFitView: () => void;
+  zoomInTrigger: number;
+  triggerZoomIn: () => void;
+  zoomOutTrigger: number;
+  triggerZoomOut: () => void;
 
   // Selection and highlighting
   tableSelected: Set<Element>;
@@ -77,6 +81,8 @@ export const useStore = create<AppState>((set, get) => ({
   edgeRelationships: {},
   layoutTrigger: 0,
   fitViewTrigger: 0,
+  zoomInTrigger: 0,
+  zoomOutTrigger: 0,
 
   // Actions
   setIsModalOpen: (open) => set({ isModalOpen: open }),
@@ -142,6 +148,14 @@ export const useStore = create<AppState>((set, get) => ({
 
   triggerFitView: () => {
     set((state) => ({ fitViewTrigger: state.fitViewTrigger + 1 }));
+  },
+
+  triggerZoomIn: () => {
+    set((state) => ({ zoomInTrigger: state.zoomInTrigger + 1 }));
+  },
+
+  triggerZoomOut: () => {
+    set((state) => ({ zoomOutTrigger: state.zoomOutTrigger + 1 }));
   },
 
   setTableSelected: (selected) => set({ tableSelected: selected }),

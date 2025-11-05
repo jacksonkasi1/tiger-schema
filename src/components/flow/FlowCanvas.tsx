@@ -32,11 +32,11 @@ const edgeTypes = {
 };
 
 function FlowCanvasInner() {
-  const { tables, updateTablePosition, getEdgeRelationship, setEdgeRelationship, layoutTrigger, fitViewTrigger } = useStore();
+  const { tables, updateTablePosition, getEdgeRelationship, setEdgeRelationship, layoutTrigger, fitViewTrigger, zoomInTrigger, zoomOutTrigger } = useStore();
   const [nodes, setNodes, onNodesChange] = useNodesState<any>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<any>([]);
   const [selectedEdge, setSelectedEdge] = useState<{id: string; type: RelationshipType; position: {x: number; y: number}} | null>(null);
-  const { fitView } = useReactFlow();
+  const { fitView, zoomIn, zoomOut, getZoom } = useReactFlow();
 
   // Convert tables to nodes and edges when tables change
   useEffect(() => {
@@ -77,6 +77,42 @@ function FlowCanvasInner() {
       fitView({ padding: 0.2, duration: 400 });
     }
   }, [fitViewTrigger, fitView]);
+
+  // Listen for zoom in trigger
+  useEffect(() => {
+    if (zoomInTrigger > 0) {
+      zoomIn({ duration: 200 });
+      // Dispatch custom event for zoom level display
+      setTimeout(() => {
+        const zoom = getZoom();
+        window.dispatchEvent(new CustomEvent('reactflow:zoom', { detail: { zoom } }));
+      }, 250);
+    }
+  }, [zoomInTrigger, zoomIn, getZoom]);
+
+  // Listen for zoom out trigger
+  useEffect(() => {
+    if (zoomOutTrigger > 0) {
+      zoomOut({ duration: 200 });
+      // Dispatch custom event for zoom level display
+      setTimeout(() => {
+        const zoom = getZoom();
+        window.dispatchEvent(new CustomEvent('reactflow:zoom', { detail: { zoom } }));
+      }, 250);
+    }
+  }, [zoomOutTrigger, zoomOut, getZoom]);
+
+  // Emit initial zoom level and listen for zoom changes
+  useEffect(() => {
+    const zoom = getZoom();
+    window.dispatchEvent(new CustomEvent('reactflow:zoom', { detail: { zoom } }));
+  }, [getZoom]);
+
+  // Handle ReactFlow zoom changes to update display
+  const onMove = useCallback(() => {
+    const zoom = getZoom();
+    window.dispatchEvent(new CustomEvent('reactflow:zoom', { detail: { zoom } }));
+  }, [getZoom]);
 
   // Handle node drag end to sync position back to store
   const onNodeDragStop = useCallback(
@@ -193,6 +229,7 @@ function FlowCanvasInner() {
         onNodeClick={onNodeClick}
         onEdgeClick={onEdgeClick}
         onPaneClick={onPaneClick}
+        onMove={onMove}
         nodeTypes={nodeTypes}
         edgeTypes={edgeTypes}
         fitView
