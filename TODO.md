@@ -31,7 +31,7 @@ Phase 4 focuses on enhancing the schema visualization with professional features
   - Filter by source/target table
   - Visual indicators for hidden relationships
 
-- [ ] **Search and filter tables**
+- [x] **Search and filter tables** ✅ COMPLETED
   - Global search bar component
   - Search by table/view name
   - Search by column name
@@ -39,6 +39,7 @@ Phase 4 focuses on enhancing the schema visualization with professional features
   - Highlight search results
   - Jump to table feature
   - Recent searches history
+  - Keyboard shortcuts (Ctrl/Cmd+F)
 
 ### 🟢 Medium Priority (Advanced Features)
 - [ ] **SQL query builder from diagram**
@@ -228,9 +229,14 @@ Phase 4 focuses on enhancing the schema visualization with professional features
 
 ### Completed ✅
 - ✅ Address code review comments (spacebar shortcut, clipboard error handling, handle ID collisions)
+- ✅ Search and filter tables with keyboard shortcuts (Ctrl/Cmd+F)
+- ✅ Auto-focus persistence bug fix
+- ✅ SQL import with drag-and-drop
+- ✅ SQL export direct download
+- ✅ Schema overwrite confirmation dialog
 
 ### In Progress 🚧
-- Planning Phase 4 implementation
+- None (Ready for next task)
 
 ### Blocked ⛔
 - None
