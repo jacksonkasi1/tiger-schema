@@ -29,7 +29,7 @@ CREATE TABLE public.posts (
 ALTER TABLE public.posts
   ADD CONSTRAINT fk_posts_user
   FOREIGN KEY (user_id)
-  REFERENCES public.users(id);
+  REFERENCES users(id);
 
 CREATE TABLE public.comments (
   id BIGINT PRIMARY KEY,
@@ -42,12 +42,12 @@ CREATE TABLE public.comments (
 ALTER TABLE public.comments
   ADD CONSTRAINT fk_comments_post
   FOREIGN KEY (post_id)
-  REFERENCES public.posts(id);
+  REFERENCES posts(id);
 
 ALTER TABLE public.comments
   ADD CONSTRAINT fk_comments_user
   FOREIGN KEY (user_id)
-  REFERENCES public.users(id);
+  REFERENCES users(id);
 
 CREATE TABLE public.categories (
   id BIGINT PRIMARY KEY,
@@ -65,12 +65,12 @@ CREATE TABLE public.post_categories (
 ALTER TABLE public.post_categories
   ADD CONSTRAINT fk_post_categories_post
   FOREIGN KEY (post_id)
-  REFERENCES public.posts(id);
+  REFERENCES posts(id);
 
 ALTER TABLE public.post_categories
   ADD CONSTRAINT fk_post_categories_category
   FOREIGN KEY (category_id)
-  REFERENCES public.categories(id);
+  REFERENCES categories(id);
 
 -- ============================================
 -- AUTH SCHEMA - Authentication tables
@@ -101,7 +101,7 @@ CREATE TABLE auth.sessions (
 ALTER TABLE auth.sessions
   ADD CONSTRAINT fk_sessions_user
   FOREIGN KEY (user_id)
-  REFERENCES auth.users(id);
+  REFERENCES users(id);
 
 CREATE TABLE auth.refresh_tokens (
   id BIGINT PRIMARY KEY,
@@ -115,7 +115,7 @@ CREATE TABLE auth.refresh_tokens (
 ALTER TABLE auth.refresh_tokens
   ADD CONSTRAINT fk_refresh_tokens_user
   FOREIGN KEY (user_id)
-  REFERENCES auth.users(id);
+  REFERENCES users(id);
 
 CREATE TABLE auth.audit_log (
   id BIGINT PRIMARY KEY,
@@ -130,7 +130,7 @@ CREATE TABLE auth.audit_log (
 ALTER TABLE auth.audit_log
   ADD CONSTRAINT fk_audit_log_user
   FOREIGN KEY (user_id)
-  REFERENCES auth.users(id);
+  REFERENCES users(id);
 
 -- ============================================
 -- STORAGE SCHEMA - File storage tables
@@ -162,7 +162,7 @@ CREATE TABLE storage.objects (
 ALTER TABLE storage.objects
   ADD CONSTRAINT fk_objects_bucket
   FOREIGN KEY (bucket_id)
-  REFERENCES storage.buckets(id);
+  REFERENCES buckets(id);
 
 CREATE TABLE storage.migrations (
   id INTEGER PRIMARY KEY,
