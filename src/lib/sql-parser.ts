@@ -47,22 +47,21 @@ export function parseSQLSchema(sql: string): TableState {
     }
   }
 
-  // Second pass: Extract foreign keys and add them to columns
+  // Second pass: Process ALL ALTER TABLE statements for foreign keys and primary keys
   for (const statement of statements) {
     const trimmed = statement.trim();
-    const createTableMatch = trimmed.match(/create\s+table\s+(?:if\s+not\s+exists\s+)?["']?(\w+)["']?\s*\(/i);
 
-    if (createTableMatch) {
-      const tableName = createTableMatch[1];
+    // Match ALTER TABLE statements
+    const alterTableMatch = trimmed.match(/alter\s+table\s+["']?(\w+)["']?/i);
 
-      // Extract ALTER TABLE statements for this table
-      const alterMatches = statements.filter(s =>
-        s.match(new RegExp(`alter\\s+table\\s+["']?${tableName}["']?`, 'i'))
-      );
+    if (alterTableMatch) {
+      const tableName = alterTableMatch[1];
 
-      for (const alterStmt of alterMatches) {
-        parseForeignKeysFromAlter(tables, tableName, alterStmt);
-      }
+      // Parse foreign keys
+      parseForeignKeysFromAlter(tables, tableName, trimmed);
+
+      // Parse primary keys from ALTER TABLE statements
+      parsePrimaryKeysFromAlter(tables, tableName, trimmed);
     }
   }
 
@@ -160,7 +159,8 @@ function parseColumnDefinition(def: string): Column | null {
  * Parse foreign keys from ALTER TABLE statements
  */
 function parseForeignKeysFromAlter(tables: TableState, tableName: string, alterStmt: string): void {
-  const fkMatch = alterStmt.match(/add\s+(?:constraint\s+\w+\s+)?foreign\s+key\s*\(["']?(\w+)["']?\)\s*references\s+["']?(\w+)["']?\s*\(["']?(\w+)["']?\)/i);
+  // Match: ALTER TABLE "table" ADD CONSTRAINT "name" FOREIGN KEY("col") REFERENCES "ref_table"("ref_col")
+  const fkMatch = alterStmt.match(/add\s+constraint\s+["']?\w+["']?\s+foreign\s+key\s*\(["']?(\w+)["']?\)\s*references\s+["']?(\w+)["']?\s*\(["']?(\w+)["']?\)/i);
 
   if (fkMatch && tables[tableName]) {
     const columnName = fkMatch[1];
@@ -171,6 +171,25 @@ function parseForeignKeysFromAlter(tables: TableState, tableName: string, alterS
     const column = tables[tableName].columns?.find(c => c.title === columnName);
     if (column) {
       column.fk = `${refTable}.${refColumn}`;
+    }
+  }
+}
+
+/**
+ * Parse primary keys from ALTER TABLE statements
+ */
+function parsePrimaryKeysFromAlter(tables: TableState, tableName: string, alterStmt: string): void {
+  // Match: ALTER TABLE "table" ADD PRIMARY KEY("col")
+  const pkMatch = alterStmt.match(/add\s+primary\s+key\s*\(["']?(\w+)["']?\)/i);
+
+  if (pkMatch && tables[tableName]) {
+    const columnName = pkMatch[1];
+
+    // Find the column and mark as primary key
+    const column = tables[tableName].columns?.find(c => c.title === columnName);
+    if (column) {
+      column.pk = true;
+      column.required = true;
     }
   }
 }
@@ -225,6 +244,7 @@ function mapPostgreSQLType(pgType: string): string {
   if (type.includes('numeric') || type.includes('decimal')) return 'numeric';
   if (type === 'real') return 'float4';
   if (type === 'double precision' || type === 'double') return 'float8';
+  if (type.includes('float')) return 'float8'; // FLOAT(n) maps to float8
 
   // String types
   if (type.includes('varchar') || type.includes('character varying')) return 'varchar';

@@ -20,7 +20,7 @@ interface ImportSQLProps {
 }
 
 export function ImportSQL({ open, onClose }: ImportSQLProps) {
-  const { setTables, triggerLayout } = useStore();
+  const { setTables, triggerLayout, triggerFitView } = useStore();
   const [isDragging, setIsDragging] = useState(false);
   const [file, setFile] = useState<File | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -134,10 +134,14 @@ export function ImportSQL({ open, onClose }: ImportSQLProps) {
 
       setTables(definition, paths);
 
-      // Auto-arrange after import
+      // Auto-arrange after import with sufficient delay for React state updates
       setTimeout(() => {
         triggerLayout();
-      }, 100);
+        // Fit view after layout is applied
+        setTimeout(() => {
+          triggerFitView();
+        }, 500);
+      }, 300);
 
       setParseResult({
         success: true,
@@ -162,7 +166,7 @@ export function ImportSQL({ open, onClose }: ImportSQLProps) {
     } finally {
       setIsProcessing(false);
     }
-  }, [file, setTables, triggerLayout, onClose, resetState]);
+  }, [file, setTables, triggerLayout, triggerFitView, onClose, resetState]);
 
   const handleClose = useCallback(() => {
     if (!isProcessing) {
