@@ -1,45 +1,69 @@
 # Bug Fixes and Code Review - Summary
 
-## Issue #1: Auto-Focus During Drag (CRITICAL) ✅ FIXED
+## Issue #1: Auto-Focus Persistence Bug (CRITICAL) ✅ FIXED
 
 ### Problem
-When dragging a table or zooming the canvas, the view would automatically jump/focus to a different table unexpectedly. This made it difficult to manipulate the diagram.
+After using search to jump to a table, when the user dragged a DIFFERENT table or navigated the canvas, the view would automatically zoom back to the previously searched table. This made it difficult to navigate after using search.
 
-### Root Cause
-The `triggerFocusTable` function in the store was setting `tableHighlighted` as a side effect:
+**User's Description:** "In the search, I was searching for it and selecting one table. It is autofocusing fine. Then, what I did was, I'm looking at another table, and I am dragging another table. So, what happens is the previously searched and selected table is automatically zoomed and made centered."
+
+### Root Cause Analysis
+
+**Initial Issue (Partially Fixed):**
+The `triggerFocusTable` function was setting `tableHighlighted` as a side effect, causing conflicts. This was removed.
+
+**Actual Root Cause (Final Fix):**
+The `focusTableId` state persisted after the search animation completed. The useEffect in FlowCanvas that listens to focus triggers would re-fire on subsequent renders because the condition `focusTableId !== null` remained true even after the initial focus was complete.
 
 ```typescript
-// BEFORE (Buggy)
-triggerFocusTable: (tableId) => {
-  set((state) => ({
-    focusTableId: tableId,
-    focusTableTrigger: state.focusTableTrigger + 1,
-    tableHighlighted: tableId, // ❌ This caused conflicts!
-  }));
-},
+// BEFORE (Still buggy)
+useEffect(() => {
+  if (focusTableTrigger > 0 && focusTableId) {
+    const node = nodes.find((n) => n.id === focusTableId);
+    if (node) {
+      fitView({
+        nodes: [node],
+        padding: 0.3,
+        duration: 600,
+        maxZoom: 1.2,
+      });
+      // ❌ focusTableId stays in state, causing re-triggers!
+    }
+  }
+}, [focusTableTrigger, focusTableId, nodes, fitView]);
 ```
 
-When other parts of the code (like drag handlers) updated `tableHighlighted`, it would trigger unintended re-renders and cause the focus effect to fire.
-
 ### Solution
-Removed `tableHighlighted` from the focus trigger. Focus and highlighting are now separate concerns:
+Clear `focusTableId` from state after the focus animation completes. This ensures the focus only happens once per search action:
 
 ```typescript
-// AFTER (Fixed)
-triggerFocusTable: (tableId) => {
-  set((state) => ({
-    focusTableId: tableId,
-    focusTableTrigger: state.focusTableTrigger + 1,
-    // Don't set tableHighlighted here - it interferes with drag operations
-    // SearchBar will handle highlighting separately if needed
-  }));
-},
+// AFTER (Fully Fixed)
+useEffect(() => {
+  if (focusTableTrigger > 0 && focusTableId) {
+    const node = nodes.find((n) => n.id === focusTableId);
+    if (node) {
+      fitView({
+        nodes: [node],
+        padding: 0.3,
+        duration: 600,
+        maxZoom: 1.2,
+      });
+
+      // Clear focusTableId after animation completes to prevent re-triggering
+      setTimeout(() => {
+        useStore.setState({ focusTableId: null });
+      }, 650); // Slightly longer than animation duration
+    }
+  }
+}, [focusTableTrigger, focusTableId, nodes, fitView]);
 ```
 
 ### Result
-✅ Tables can now be dragged without triggering unwanted focus
-✅ Zoom operations work normally
-✅ Search still works perfectly (focuses only when explicitly triggered)
+✅ Search and jump-to-table works correctly (focuses on first trigger)
+✅ After search animation completes, focusTableId is cleared
+✅ Dragging other tables no longer triggers auto-focus
+✅ Canvas navigation works freely after using search
+✅ No unwanted zoom behavior
 
 ---
 
@@ -220,7 +244,8 @@ const { files } = e.target;
 ### Commits:
 1. `feat: add comprehensive search and filter functionality` (dfe3c13)
 2. `docs: add comprehensive user guide for search functionality` (3f883ce)
-3. `fix: resolve code review issues and auto-focus bug` (d6d3a62) ⭐
+3. `fix: resolve code review issues and initial auto-focus bug` (previous commits)
+4. `fix: prevent auto-focus persistence bug after search` (f3e1fff) ⭐ **COMPLETE FIX**
 
 ---
 
@@ -248,20 +273,24 @@ const { files } = e.target;
 
 ## Before vs After
 
-### Auto-Focus Bug
+### Auto-Focus Persistence Bug
 
-**Before:**
+**Before (Buggy Behavior):**
 ```
-User: *drags table*
-System: *suddenly zooms to different table*
-User: "Wait, what? Where did it go?"
+User: *searches for "users" table*
+System: *zooms to users table* ✓
+User: *drags "orders" table to reposition it*
+System: *suddenly zooms back to users table!* ❌
+User: "Why does it keep going back?!"
 ```
 
-**After:**
+**After (Fixed Behavior):**
 ```
-User: *drags table*
-System: *table moves smoothly*
-User: "Perfect! Exactly what I expected."
+User: *searches for "users" table*
+System: *zooms to users table* ✓
+User: *drags "orders" table to reposition it*
+System: *orders table moves smoothly* ✓
+User: "Perfect! I can navigate freely now."
 ```
 
 ### SQL Parser
