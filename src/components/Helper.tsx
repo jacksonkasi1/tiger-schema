@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useStore } from '@/lib/store';
 import { useClipboard } from '@/lib/hooks';
+import { downloadSQLSchema } from '@/lib/sql-exporter';
 import { toPng } from 'html-to-image';
 import {
   Share2,
@@ -15,11 +16,11 @@ import {
   ChevronLeft,
   ChevronRight,
 } from 'lucide-react';
-import { ModalSQL } from './ModalSQL';
 import { ModalTypes } from './ModalTypes';
 import { HelperZoom } from './HelperZoom';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
+import { toast } from 'sonner';
 import AES from 'crypto-js/aes';
 
 interface HelperProps {
@@ -31,7 +32,6 @@ export function Helper({ onChatOpen, isChatOpen = false }: HelperProps) {
   const { tables, schemaView, supabaseApiKey, triggerLayout, triggerFitView } =
     useStore();
   const { copy, copied } = useClipboard();
-  const [exportSQL, setExportSQL] = useState(false);
   const [exportTypes, setExportTypes] = useState(false);
   const [isToolbarExpanded, setIsToolbarExpanded] = useState(true);
 
@@ -41,6 +41,34 @@ export function Helper({ onChatOpen, isChatOpen = false }: HelperProps) {
 
   const handleFitView = () => {
     triggerFitView();
+  };
+
+  const handleExportSQL = () => {
+    try {
+      const tableCount = Object.keys(tables).length;
+
+      if (tableCount === 0) {
+        toast.error('No tables to export', {
+          description: 'Please import or create a schema first',
+        });
+        return;
+      }
+
+      // Generate filename with timestamp
+      const timestamp = new Date().toISOString().split('T')[0];
+      const filename = `schema_${timestamp}.sql`;
+
+      downloadSQLSchema(tables, filename);
+
+      toast.success('SQL schema exported successfully', {
+        description: `Downloaded ${filename}`,
+      });
+    } catch (error) {
+      console.error('Error exporting SQL:', error);
+      toast.error('Failed to export SQL schema', {
+        description: error instanceof Error ? error.message : 'Unknown error',
+      });
+    }
   };
 
   const screenshot = () => {
@@ -158,7 +186,7 @@ export function Helper({ onChatOpen, isChatOpen = false }: HelperProps) {
               variant="outline"
               size="icon"
               title="Export SQL"
-              onClick={() => setExportSQL(true)}
+              onClick={handleExportSQL}
             >
               <Database size={20} />
             </Button>
@@ -206,7 +234,6 @@ export function Helper({ onChatOpen, isChatOpen = false }: HelperProps) {
         )}
       </div>
 
-      <ModalSQL open={exportSQL} onClose={() => setExportSQL(false)} />
       <ModalTypes open={exportTypes} onClose={() => setExportTypes(false)} />
     </>
   );
