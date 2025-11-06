@@ -18,10 +18,14 @@ export function parseSQLSchema(sql: string): TableState {
     const trimmed = statement.trim();
 
     // Match CREATE TABLE statements
-    const createTableMatch = trimmed.match(/create\s+table\s+(?:if\s+not\s+exists\s+)?["']?(\w+)["']?\s*\(/i);
+    // Improved regex to handle schema prefixes (e.g., public.users) and quoted identifiers
+    const createTableMatch = trimmed.match(
+      /create\s+table\s+(?:if\s+not\s+exists\s+)?(?:["']?(\w+)["']?\.)?["']?(\w+)["']?\s*\(/i
+    );
 
     if (createTableMatch) {
-      const tableName = createTableMatch[1];
+      // Use table name (with or without schema prefix)
+      const tableName = createTableMatch[2]; // Always use the actual table name, not schema
       const columns = parseColumns(statement);
 
       tables[tableName] = {
@@ -33,10 +37,13 @@ export function parseSQLSchema(sql: string): TableState {
     }
 
     // Match CREATE VIEW statements
-    const createViewMatch = trimmed.match(/create\s+(?:or\s+replace\s+)?view\s+(?:if\s+not\s+exists\s+)?["']?(\w+)["']?\s+as/i);
+    // Improved regex to handle schema prefixes and quoted identifiers
+    const createViewMatch = trimmed.match(
+      /create\s+(?:or\s+replace\s+)?view\s+(?:if\s+not\s+exists\s+)?(?:["']?(\w+)["']?\.)?["']?(\w+)["']?\s+as/i
+    );
 
     if (createViewMatch) {
-      const viewName = createViewMatch[1];
+      const viewName = createViewMatch[2]; // Use actual view name, not schema
 
       tables[viewName] = {
         title: viewName,
@@ -110,12 +117,23 @@ function parseColumns(createStatement: string): Column[] {
  * Parse a single column definition
  */
 function parseColumnDefinition(def: string): Column | null {
-  // Extract column name (with optional quotes)
-  const nameMatch = def.match(/^["']?(\w+)["']?\s+(.+)/i);
+  // Extract column name (supporting quoted identifiers with spaces/special chars)
+  // Matches: "column name", 'column name', or unquoted_column_name
+  const nameMatch = def.match(
+    /^("([^"]+)"|'([^']+)'|([A-Za-z_][A-Za-z0-9_]*))\s+(.+)/i
+  );
+
   if (!nameMatch) return null;
 
-  const columnName = nameMatch[1];
-  const rest = nameMatch[2];
+  // Use the correct capture group depending on quoted/unquoted
+  const columnName =
+    nameMatch[2] !== undefined
+      ? nameMatch[2] // double-quoted
+      : nameMatch[3] !== undefined
+      ? nameMatch[3] // single-quoted
+      : nameMatch[4]; // unquoted
+
+  const rest = nameMatch[5];
 
   // Extract data type
   const typeMatch = rest.match(/^(\w+)(?:\s*\([\d,\s]+\))?/i);
@@ -134,11 +152,21 @@ function parseColumnDefinition(def: string): Column | null {
     foreignKey = `${fkMatch[1]}.${fkMatch[2]}`;
   }
 
-  // Check for default value
+  // Check for default value - improved to handle quoted strings and complex expressions
   let defaultValue: any;
-  const defaultMatch = rest.match(/default\s+([^,\s]+(?:\s*\([^)]*\))?)/i);
+  // Match quoted strings, parenthesized expressions, or unquoted values
+  const defaultMatch = rest.match(
+    /default\s+((?:'[^']*'|"[^"]*"|\([^)]+\)|[^,\s]+(?:\s*[^,]*?)))/i
+  );
+
   if (defaultMatch) {
-    defaultValue = defaultMatch[1].trim();
+    let val = defaultMatch[1].trim();
+    // Remove surrounding quotes if present for string literals
+    if ((val.startsWith("'") && val.endsWith("'")) ||
+        (val.startsWith('"') && val.endsWith('"'))) {
+      val = val.slice(1, -1);
+    }
+    defaultValue = val;
   }
 
   // Map PostgreSQL types to format

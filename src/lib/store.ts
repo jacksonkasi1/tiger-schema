@@ -169,7 +169,8 @@ export const useStore = create<AppState>((set, get) => ({
     set((state) => ({
       focusTableId: tableId,
       focusTableTrigger: state.focusTableTrigger + 1,
-      tableHighlighted: tableId, // Also highlight the table
+      // Don't set tableHighlighted here - it interferes with drag operations
+      // SearchBar will handle highlighting separately if needed
     }));
   },
 

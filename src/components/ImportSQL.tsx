@@ -11,7 +11,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { Upload, FileText, CheckCircle2, XCircle, Loader2 } from 'lucide-react';
+import { Upload, FileText, CheckCircle2, XCircle, Loader2, AlertTriangle } from 'lucide-react';
 import { toast } from 'sonner';
 
 interface ImportSQLProps {
@@ -20,10 +20,16 @@ interface ImportSQLProps {
 }
 
 export function ImportSQL({ open, onClose }: ImportSQLProps) {
-  const { setTables, triggerLayout, triggerFitView } = useStore();
+  const { tables, setTables, triggerLayout, triggerFitView } = useStore();
   const [isDragging, setIsDragging] = useState(false);
   const [file, setFile] = useState<File | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [showOverwriteConfirm, setShowOverwriteConfirm] = useState(false);
+  const [pendingImport, setPendingImport] = useState<{
+    definition: any;
+    paths: any;
+    tableCount: number;
+  } | null>(null);
   const [parseResult, setParseResult] = useState<{
     success: boolean;
     message: string;
@@ -34,6 +40,50 @@ export function ImportSQL({ open, onClose }: ImportSQLProps) {
     setFile(null);
     setParseResult(null);
     setIsDragging(false);
+    setShowOverwriteConfirm(false);
+    setPendingImport(null);
+  }, []);
+
+  const performImport = useCallback((definition: any, paths: any, tableCount: number) => {
+    setTables(definition, paths);
+
+    // Auto-arrange after import with sufficient delay for React state updates
+    setTimeout(() => {
+      triggerLayout();
+      // Fit view after layout is applied
+      setTimeout(() => {
+        triggerFitView();
+      }, 500);
+    }, 300);
+
+    setParseResult({
+      success: true,
+      message: `Successfully imported ${tableCount} table${tableCount > 1 ? 's' : ''}!`,
+      tableCount,
+    });
+
+    toast.success(`Imported ${tableCount} table${tableCount > 1 ? 's' : ''} successfully`);
+
+    // Close dialog after a short delay
+    setTimeout(() => {
+      onClose();
+      resetState();
+    }, 1500);
+
+    setIsProcessing(false);
+  }, [setTables, triggerLayout, triggerFitView, onClose, resetState]);
+
+  const handleConfirmOverwrite = useCallback(() => {
+    if (pendingImport) {
+      setShowOverwriteConfirm(false);
+      performImport(pendingImport.definition, pendingImport.paths, pendingImport.tableCount);
+    }
+  }, [pendingImport, performImport]);
+
+  const handleCancelOverwrite = useCallback(() => {
+    setShowOverwriteConfirm(false);
+    setPendingImport(null);
+    setIsProcessing(false);
   }, []);
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
@@ -67,7 +117,7 @@ export function ImportSQL({ open, onClose }: ImportSQLProps) {
   }, []);
 
   const handleFileInput = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files;
+    const { files } = e.target;
     if (files && files.length > 0) {
       setFile(files[0]);
       setParseResult(null);
@@ -132,24 +182,19 @@ export function ImportSQL({ open, onClose }: ImportSQLProps) {
         }
       });
 
-      setTables(definition, paths);
+      // Check if schema already exists
+      const hasExistingSchema = Object.keys(tables).length > 0;
 
-      // Auto-arrange after import with sufficient delay for React state updates
-      setTimeout(() => {
-        triggerLayout();
-        // Fit view after layout is applied
-        setTimeout(() => {
-          triggerFitView();
-        }, 500);
-      }, 300);
+      if (hasExistingSchema) {
+        // Show confirmation dialog
+        setPendingImport({ definition, paths, tableCount });
+        setShowOverwriteConfirm(true);
+        setIsProcessing(false);
+        return;
+      }
 
-      setParseResult({
-        success: true,
-        message: `Successfully imported ${tableCount} table${tableCount > 1 ? 's' : ''}!`,
-        tableCount,
-      });
-
-      toast.success(`Imported ${tableCount} table${tableCount > 1 ? 's' : ''} successfully`);
+      // No existing schema, import directly
+      performImport(definition, paths, tableCount);
 
       // Close dialog after a short delay
       setTimeout(() => {
@@ -166,7 +211,7 @@ export function ImportSQL({ open, onClose }: ImportSQLProps) {
     } finally {
       setIsProcessing(false);
     }
-  }, [file, setTables, triggerLayout, triggerFitView, onClose, resetState]);
+  }, [file, tables, performImport]);
 
   const handleClose = useCallback(() => {
     if (!isProcessing) {
@@ -300,6 +345,47 @@ export function ImportSQL({ open, onClose }: ImportSQLProps) {
           </div>
         </div>
       </DialogContent>
+
+      {/* Overwrite Confirmation Dialog */}
+      <Dialog open={showOverwriteConfirm} onOpenChange={setShowOverwriteConfirm}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <div className="flex items-center gap-3">
+              <AlertTriangle className="w-6 h-6 text-orange-500" />
+              <DialogTitle>Overwrite Existing Schema?</DialogTitle>
+            </div>
+            <DialogDescription className="pt-2">
+              You currently have <strong>{Object.keys(tables).length} table{Object.keys(tables).length !== 1 ? 's' : ''}</strong> in your schema.
+              Importing this SQL file will <strong>replace all existing tables</strong>.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 mt-4">
+            {pendingImport && (
+              <div className="bg-muted p-4 rounded-lg">
+                <p className="text-sm">
+                  <strong>New schema:</strong> {pendingImport.tableCount} table{pendingImport.tableCount !== 1 ? 's' : ''} will be imported
+                </p>
+              </div>
+            )}
+
+            <div className="flex justify-end space-x-2 pt-4">
+              <Button
+                variant="outline"
+                onClick={handleCancelOverwrite}
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="destructive"
+                onClick={handleConfirmOverwrite}
+              >
+                Overwrite Schema
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </Dialog>
   );
 }
