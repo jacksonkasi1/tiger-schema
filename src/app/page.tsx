@@ -14,10 +14,25 @@ import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { useEffect } from 'react';
 
+// Import memory monitor for side effects (exposes window.memoryMonitor)
+import '@/lib/memory-monitor';
+
 export default function HomePage() {
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [isImportOpen, setIsImportOpen] = useState(false);
   const { triggerFocusTable, clearCache, tables } = useStore();
+
+  // Log memory monitor availability in development
+  useEffect(() => {
+    if (process.env.NODE_ENV === 'development') {
+      console.log('[Dev] Memory monitor available via window.memoryMonitor');
+      console.log('[Dev] Usage:');
+      console.log('  window.memoryMonitor.start() - Start monitoring');
+      console.log('  window.memoryMonitor.stop() - Stop and show summary');
+      console.log('  window.memoryMonitor.logLocalStorage() - Show localStorage usage');
+      console.log('  window.memoryMonitor.forceGC() - Force garbage collection (needs --expose-gc)');
+    }
+  }, []);
 
   // Listen for storage events
   useEffect(() => {

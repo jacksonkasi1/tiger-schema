@@ -45,32 +45,45 @@ export function ImportSQL({ open, onClose }: ImportSQLProps) {
   }, []);
 
   const performImport = useCallback((definition: any, paths: any, tableCount: number) => {
-    setTables(definition, paths);
+    // Use requestIdleCallback to perform import without blocking UI
+    const scheduleImport = () => {
+      return new Promise<void>((resolve) => {
+        // Break up the work to avoid blocking
+        requestAnimationFrame(() => {
+          setTables(definition, paths);
 
-    // Auto-arrange after import with sufficient delay for React state updates
-    setTimeout(() => {
-      triggerLayout();
-      // Fit view after layout is applied
+          // Give React time to update
+          requestAnimationFrame(() => {
+            // Auto-arrange after import
+            triggerLayout();
+
+            // Fit view after layout
+            setTimeout(() => {
+              triggerFitView();
+              resolve();
+            }, 600);
+          });
+        });
+      });
+    };
+
+    scheduleImport().then(() => {
+      setParseResult({
+        success: true,
+        message: `Successfully imported ${tableCount} table${tableCount > 1 ? 's' : ''}!`,
+        tableCount,
+      });
+
+      toast.success(`Imported ${tableCount} table${tableCount > 1 ? 's' : ''} successfully`);
+
+      // Close dialog after a short delay
       setTimeout(() => {
-        triggerFitView();
-      }, 500);
-    }, 300);
+        onClose();
+        resetState();
+      }, 1500);
 
-    setParseResult({
-      success: true,
-      message: `Successfully imported ${tableCount} table${tableCount > 1 ? 's' : ''}!`,
-      tableCount,
+      setIsProcessing(false);
     });
-
-    toast.success(`Imported ${tableCount} table${tableCount > 1 ? 's' : ''} successfully`);
-
-    // Close dialog after a short delay
-    setTimeout(() => {
-      onClose();
-      resetState();
-    }, 1500);
-
-    setIsProcessing(false);
   }, [setTables, triggerLayout, triggerFitView, onClose, resetState]);
 
   const handleConfirmOverwrite = useCallback(() => {
