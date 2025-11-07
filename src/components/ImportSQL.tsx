@@ -45,33 +45,34 @@ export function ImportSQL({ open, onClose }: ImportSQLProps) {
   }, []);
 
   const performImport = useCallback(async (definition: any, paths: any, tableCount: number) => {
-    // Apply tables to store (this triggers React re-renders)
-    console.log('[Import] Applying tables to store...');
+    console.log('[Import] Starting import process...');
 
-    // Use setTimeout to yield control back to browser
-    await new Promise<void>(resolve => {
-      setTimeout(() => {
-        setTables(definition, paths);
-        console.log('[Import] Tables set in store');
-        resolve();
-      }, 0);
-    });
+    // Set tables in store (FlowCanvas will defer node/edge conversion)
+    console.log('[Import] Setting tables...');
+    setTables(definition, paths);
 
-    // Wait for React to update
-    await new Promise(resolve => setTimeout(resolve, 100));
+    // Wait for FlowCanvas to convert tables to nodes/edges
+    // (FlowCanvas useEffect is deferred via setTimeout(0))
+    console.log('[Import] Waiting for nodes/edges conversion...');
+    await new Promise(resolve => setTimeout(resolve, 500));
 
     // Trigger layout
     console.log('[Import] Triggering layout...');
     triggerLayout();
 
-    // Wait for layout to apply
-    await new Promise(resolve => setTimeout(resolve, 300));
+    // Wait for layout to apply (dagre calculation + ReactFlow render)
+    console.log('[Import] Waiting for layout...');
+    await new Promise(resolve => setTimeout(resolve, 700));
 
     // Fit view
     console.log('[Import] Fitting view...');
     triggerFitView();
 
+    // Wait for fit view animation
+    await new Promise(resolve => setTimeout(resolve, 400));
+
     // Show success
+    console.log('[Import] ✅ Import complete!');
     setParseResult({
       success: true,
       message: `Successfully imported ${tableCount} table${tableCount > 1 ? 's' : ''}!`,

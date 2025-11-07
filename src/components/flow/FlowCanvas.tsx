@@ -74,48 +74,58 @@ function FlowCanvasInner() {
     reactFlowRef.current = { fitView, zoomIn, zoomOut, getZoom };
   }, [fitView, zoomIn, zoomOut, getZoom]);
 
-  // Convert tables to nodes and edges when tables change (memoized)
+  // Convert tables to nodes and edges when tables change (NON-BLOCKING)
   useEffect(() => {
-    // Filter tables by visible schemas
-    const filteredTables = Object.entries(tables).reduce((acc, [key, table]) => {
-      const schema = table.schema || 'public';
-      if (visibleSchemas.size === 0 || visibleSchemas.has(schema)) {
-        acc[key] = table;
-      }
-      return acc;
-    }, {} as typeof tables);
+    // Defer this work to avoid blocking UI during import
+    const timeoutId = setTimeout(() => {
+      console.log('[FlowCanvas] Converting tables to nodes/edges...');
 
-    const flowNodes = tablesToNodes(filteredTables);
-    const flowEdges = tablesToEdges(filteredTables).map((edge) => {
-      const relationshipType = getEdgeRelationship(edge.id);
+      // Filter tables by visible schemas
+      const filteredTables = Object.entries(tables).reduce((acc, [key, table]) => {
+        const schema = table.schema || 'public';
+        if (visibleSchemas.size === 0 || visibleSchemas.has(schema)) {
+          acc[key] = table;
+        }
+        return acc;
+      }, {} as typeof tables);
 
-      const markerEnd = {
-        type: MarkerType.ArrowClosed,
-        width: 20,
-        height: 20,
-        color: '#6B7280',
-      };
+      const flowNodes = tablesToNodes(filteredTables);
+      const flowEdges = tablesToEdges(filteredTables).map((edge) => {
+        const relationshipType = getEdgeRelationship(edge.id);
 
-      const markerStart = relationshipType === 'many-to-many' ? {
-        type: MarkerType.ArrowClosed,
-        width: 20,
-        height: 20,
-        color: '#6B7280',
-      } : undefined;
+        const markerEnd = {
+          type: MarkerType.ArrowClosed,
+          width: 20,
+          height: 20,
+          color: '#6B7280',
+        };
 
-      return {
-        ...edge,
-        type: 'custom',
-        markerEnd,
-        markerStart,
-        data: {
-          ...edge.data,
-          relationshipType,
-        },
-      };
-    });
-    setNodes(flowNodes);
-    setEdges(flowEdges);
+        const markerStart = relationshipType === 'many-to-many' ? {
+          type: MarkerType.ArrowClosed,
+          width: 20,
+          height: 20,
+          color: '#6B7280',
+        } : undefined;
+
+        return {
+          ...edge,
+          type: 'custom',
+          markerEnd,
+          markerStart,
+          data: {
+            ...edge.data,
+            relationshipType,
+          },
+        };
+      });
+
+      console.log(`[FlowCanvas] Setting ${flowNodes.length} nodes and ${flowEdges.length} edges`);
+      setNodes(flowNodes);
+      setEdges(flowEdges);
+      console.log('[FlowCanvas] Nodes/edges set');
+    }, 0); // Defer to next tick
+
+    return () => clearTimeout(timeoutId);
   }, [tables, visibleSchemas, setNodes, setEdges, getEdgeRelationship]);
 
   // Listen for layout trigger from store
