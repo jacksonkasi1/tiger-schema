@@ -76,8 +76,9 @@ function FlowCanvasInner() {
 
   // Convert tables to nodes and edges when tables change (NON-BLOCKING)
   useEffect(() => {
-    // Defer this work to avoid blocking UI during import
-    const timeoutId = setTimeout(() => {
+    // Use queueMicrotask instead of setTimeout - it can't be canceled!
+    // This ensures conversion ALWAYS completes even during rapid re-renders
+    queueMicrotask(() => {
       console.log('[FlowCanvas] Converting tables to nodes/edges...');
 
       // Filter tables by visible schemas
@@ -123,9 +124,8 @@ function FlowCanvasInner() {
       setNodes(flowNodes);
       setEdges(flowEdges);
       console.log('[FlowCanvas] Nodes/edges set');
-    }, 0); // Defer to next tick
-
-    return () => clearTimeout(timeoutId);
+    });
+    // No cleanup needed - queueMicrotask always completes
   }, [tables, visibleSchemas, setNodes, setEdges, getEdgeRelationship]);
 
   // Listen for layout trigger from store
