@@ -1,347 +1,271 @@
 import { TableState, Column } from './types';
-import { Parser } from 'node-sql-parser';
 
 /**
- * Parse PostgreSQL CREATE TABLE statements into TableState format using node-sql-parser
+ * Parse PostgreSQL CREATE TABLE statements into TableState format
  */
 export function parseSQLSchema(sql: string): TableState {
-  const parser = new Parser();
   const tables: TableState = {};
 
-  try {
-    // Parse SQL to AST
-    const ast = parser.astify(sql, { database: 'PostgreSQL' });
+  // Remove comments (both -- and /* */)
+  let cleanedSQL = sql
+    .replace(/--[^\n]*/g, '') // Remove single-line comments
+    .replace(/\/\*[\s\S]*?\*\//g, ''); // Remove multi-line comments
 
-    // Ensure ast is an array
-    const statements = Array.isArray(ast) ? ast : [ast];
+  // Split into individual statements
+  const statements = cleanedSQL.split(';').filter(s => s.trim());
 
-    // First pass: Create tables and views
-    for (const statement of statements) {
-      if (!statement) continue;
+  for (const statement of statements) {
+    const trimmed = statement.trim();
 
-      // Handle CREATE TABLE
-      if (statement.type === 'create' && statement.keyword === 'table') {
-        const tableInfo = extractTableInfo(statement);
-        if (tableInfo) {
-          // Use schema-qualified name as key to avoid collisions (e.g., public.users vs auth.users)
-          const uniqueKey = `${tableInfo.schema}.${tableInfo.name}`;
+    // Match CREATE TABLE statements
+    // Improved regex to handle schema prefixes (e.g., public.users) and quoted identifiers
+    const createTableMatch = trimmed.match(
+      /create\s+table\s+(?:if\s+not\s+exists\s+)?(?:["']?(\w+)["']?\.)?["']?(\w+)["']?\s*\(/i
+    );
 
-          tables[uniqueKey] = {
-            title: tableInfo.name,
-            is_view: false,
-            columns: tableInfo.columns,
-            position: { x: 0, y: 0 },
-            schema: tableInfo.schema
-          };
-        }
-      }
+    if (createTableMatch) {
+      // Extract schema and table name
+      const schemaName = createTableMatch[1] || 'public'; // Default to 'public' if no schema specified
+      const tableName = createTableMatch[2]; // Always use the actual table name, not schema
+      const columns = parseColumns(statement);
 
-      // Handle CREATE VIEW
-      if (statement.type === 'create' && statement.keyword === 'view') {
-        const viewInfo = extractViewInfo(statement);
-        if (viewInfo) {
-          // Use schema-qualified name as key
-          const uniqueKey = `${viewInfo.schema}.${viewInfo.name}`;
-
-          tables[uniqueKey] = {
-            title: viewInfo.name,
-            is_view: true,
-            columns: [],
-            position: { x: 0, y: 0 },
-            schema: viewInfo.schema
-          };
-        }
-      }
+      // Use schema-qualified key to avoid name collisions (e.g., public.users vs auth.users)
+      const uniqueKey = `${schemaName}.${tableName}`;
+      tables[uniqueKey] = {
+        title: tableName,
+        is_view: false,
+        columns: columns,
+        position: { x: 0, y: 0 },
+        schema: schemaName
+      };
     }
 
-    // Second pass: Process ALTER TABLE for foreign keys and primary keys
-    for (const statement of statements) {
-      if (!statement) continue;
+    // Match CREATE VIEW statements
+    // Improved regex to handle schema prefixes and quoted identifiers
+    const createViewMatch = trimmed.match(
+      /create\s+(?:or\s+replace\s+)?view\s+(?:if\s+not\s+exists\s+)?(?:["']?(\w+)["']?\.)?["']?(\w+)["']?\s+as/i
+    );
 
-      if (statement.type === 'alter') {
-        processAlterTable(statement, tables);
-      }
+    if (createViewMatch) {
+      const schemaName = createViewMatch[1] || 'public'; // Default to 'public' if no schema specified
+      const viewName = createViewMatch[2]; // Use actual view name, not schema
+
+      // Use schema-qualified key
+      const uniqueKey = `${schemaName}.${viewName}`;
+      tables[uniqueKey] = {
+        title: viewName,
+        is_view: true,
+        columns: [],
+        position: { x: 0, y: 0 },
+        schema: schemaName
+      };
     }
+  }
 
-  } catch (error) {
-    console.error('Error parsing SQL with node-sql-parser:', error);
-    // Fallback: try to extract basic info from the error or return empty
-    console.warn('Falling back to regex-based parsing might be needed for complex SQL');
+  // Second pass: Process ALL ALTER TABLE statements for foreign keys and primary keys
+  for (const statement of statements) {
+    const trimmed = statement.trim();
+
+    // Match ALTER TABLE statements (handle schema prefixes like public.users or just users)
+    const alterTableMatch = trimmed.match(/alter\s+table\s+(?:["']?(\w+)["']?\.)?["']?(\w+)["']?/i);
+
+    if (alterTableMatch) {
+      const schemaName = alterTableMatch[1] || 'public'; // Extract schema or default to 'public'
+      const tableName = alterTableMatch[2]; // Use the table name, ignore schema prefix
+
+      // Build schema-qualified key for lookup
+      const uniqueKey = `${schemaName}.${tableName}`;
+
+      // Parse foreign keys
+      parseForeignKeysFromAlter(tables, uniqueKey, trimmed);
+
+      // Parse primary keys from ALTER TABLE statements
+      parsePrimaryKeysFromAlter(tables, uniqueKey, trimmed);
+    }
   }
 
   return tables;
 }
 
 /**
- * Extract table information from CREATE TABLE AST node
+ * Parse columns from CREATE TABLE statement
  */
-function extractTableInfo(statement: any): { name: string; schema: string; columns: Column[] } | null {
-  try {
-    const tableInfo = statement.table?.[0];
-    if (!tableInfo) return null;
+function parseColumns(createStatement: string): Column[] {
+  const columns: Column[] = [];
 
-    const tableName = tableInfo.table;
-    const schema = tableInfo.db || 'public';
+  // Extract the content between parentheses
+  const match = createStatement.match(/\(([\s\S]+)\)/);
+  if (!match) return columns;
 
-    console.log(`Extracting table: ${tableName}, schema: ${schema}, db field:`, tableInfo.db);
+  const content = match[1];
 
-    const columns: Column[] = [];
+  // Split by commas, but be careful with nested parentheses
+  const columnDefs = splitByComma(content);
 
-    // Parse column definitions
-    if (statement.create_definitions) {
-      for (const def of statement.create_definitions) {
-        if (def.resource === 'column') {
-          const column = parseColumnFromAST(def);
-          if (column) {
-            columns.push(column);
-          }
-        }
+  for (const def of columnDefs) {
+    const trimmed = def.trim();
 
-        // Handle inline primary keys
-        if (def.resource === 'constraint' && def.constraint_type === 'primary key') {
-          const pkColumns = def.definition || [];
-          pkColumns.forEach((pkCol: any) => {
-            const colName = pkCol.column;
-            const col = columns.find(c => c.title === colName);
-            if (col) {
-              col.pk = true;
-              col.required = true;
-            }
-          });
-        }
-
-        // Handle inline foreign keys
-        if (def.resource === 'constraint' && def.constraint_type === 'FOREIGN KEY') {
-          const fkColumns = def.definition || [];
-          const refTable = def.reference_definition?.table?.[0]?.table;
-          const refColumns = def.reference_definition?.definition || [];
-
-          if (fkColumns.length > 0 && refColumns.length > 0 && refTable) {
-            const colName = fkColumns[0].column;
-            const refColName = refColumns[0].column;
-            const col = columns.find(c => c.title === colName);
-            if (col) {
-              col.fk = `${refTable}.${refColName}`;
-            }
-          }
-        }
-      }
+    // Skip constraint definitions
+    if (
+      trimmed.match(/^constraint\s+/i) ||
+      trimmed.match(/^primary\s+key\s*\(/i) ||
+      trimmed.match(/^foreign\s+key\s*\(/i) ||
+      trimmed.match(/^unique\s*\(/i) ||
+      trimmed.match(/^check\s*\(/i)
+    ) {
+      continue;
     }
 
-    return { name: tableName, schema, columns };
-  } catch (error) {
-    console.error('Error extracting table info:', error);
-    return null;
+    const column = parseColumnDefinition(trimmed);
+    if (column) {
+      columns.push(column);
+    }
+  }
+
+  return columns;
+}
+
+/**
+ * Parse a single column definition
+ */
+function parseColumnDefinition(def: string): Column | null {
+  // Extract column name (supporting quoted identifiers with spaces/special chars)
+  // Matches: "column name", 'column name', or unquoted_column_name
+  const nameMatch = def.match(
+    /^("([^"]+)"|'([^']+)'|([A-Za-z_][A-Za-z0-9_]*))\s+(.+)/i
+  );
+
+  if (!nameMatch) return null;
+
+  // Use the correct capture group depending on quoted/unquoted
+  const columnName =
+    nameMatch[2] !== undefined
+      ? nameMatch[2] // double-quoted
+      : nameMatch[3] !== undefined
+      ? nameMatch[3] // single-quoted
+      : nameMatch[4]; // unquoted
+
+  const rest = nameMatch[5];
+
+  // Extract data type
+  const typeMatch = rest.match(/^(\w+)(?:\s*\([\d,\s]+\))?/i);
+  if (!typeMatch) return null;
+
+  const dataType = typeMatch[0].trim();
+
+  // Check for constraints
+  const isPrimaryKey = /primary\s+key/i.test(rest);
+  const isNotNull = /not\s+null/i.test(rest);
+
+  // Check for foreign key reference
+  let foreignKey: string | undefined;
+  const fkMatch = rest.match(/references\s+["']?(\w+)["']?\s*\(["']?(\w+)["']?\)/i);
+  if (fkMatch) {
+    foreignKey = `${fkMatch[1]}.${fkMatch[2]}`;
+  }
+
+  // Check for default value - improved to handle quoted strings and complex expressions
+  let defaultValue: any;
+  // Match quoted strings, parenthesized expressions, or unquoted values
+  const defaultMatch = rest.match(
+    /default\s+((?:'[^']*'|"[^"]*"|\([^)]+\)|[^,\s]+(?:\s*[^,]*?)))/i
+  );
+
+  if (defaultMatch) {
+    let val = defaultMatch[1].trim();
+    // Remove surrounding quotes if present for string literals
+    if ((val.startsWith("'") && val.endsWith("'")) ||
+        (val.startsWith('"') && val.endsWith('"'))) {
+      val = val.slice(1, -1);
+    }
+    defaultValue = val;
+  }
+
+  // Map PostgreSQL types to format
+  const format = mapPostgreSQLType(dataType);
+
+  return {
+    title: columnName,
+    format: format,
+    type: determineType(format),
+    default: defaultValue,
+    required: isNotNull || isPrimaryKey,
+    pk: isPrimaryKey,
+    fk: foreignKey
+  };
+}
+
+/**
+ * Parse foreign keys from ALTER TABLE statements
+ * @param tableKey - Schema-qualified key (e.g., "public.posts" or "auth.users")
+ */
+function parseForeignKeysFromAlter(tables: TableState, tableKey: string, alterStmt: string): void {
+  // Match: ALTER TABLE "table" ADD CONSTRAINT "name" FOREIGN KEY("col") REFERENCES "ref_table"("ref_col")
+  const fkMatch = alterStmt.match(/add\s+constraint\s+["']?\w+["']?\s+foreign\s+key\s*\(["']?(\w+)["']?\)\s*references\s+["']?(\w+)["']?\s*\(["']?(\w+)["']?\)/i);
+
+  if (fkMatch && tables[tableKey]) {
+    const columnName = fkMatch[1];
+    const refTable = fkMatch[2];
+    const refColumn = fkMatch[3];
+
+    // Find the column and add FK reference
+    const column = tables[tableKey].columns?.find(c => c.title === columnName);
+    if (column) {
+      column.fk = `${refTable}.${refColumn}`;
+    }
   }
 }
 
 /**
- * Extract view information from CREATE VIEW AST node
+ * Parse primary keys from ALTER TABLE statements
+ * @param tableKey - Schema-qualified key (e.g., "public.posts" or "auth.users")
  */
-function extractViewInfo(statement: any): { name: string; schema: string } | null {
-  try {
-    const viewInfo = statement.table?.[0];
-    if (!viewInfo) return null;
+function parsePrimaryKeysFromAlter(tables: TableState, tableKey: string, alterStmt: string): void {
+  // Match: ALTER TABLE "table" ADD PRIMARY KEY("col")
+  const pkMatch = alterStmt.match(/add\s+primary\s+key\s*\(["']?(\w+)["']?\)/i);
 
-    const viewName = viewInfo.table;
-    const schema = viewInfo.db || 'public';
+  if (pkMatch && tables[tableKey]) {
+    const columnName = pkMatch[1];
 
-    return { name: viewName, schema };
-  } catch (error) {
-    console.error('Error extracting view info:', error);
-    return null;
+    // Find the column and mark as primary key
+    const column = tables[tableKey].columns?.find(c => c.title === columnName);
+    if (column) {
+      column.pk = true;
+      column.required = true;
+    }
   }
 }
 
 /**
- * Parse column definition from AST
+ * Split string by comma, respecting parentheses
  */
-function parseColumnFromAST(columnDef: any): Column | null {
-  try {
-    // Extract column name - handle deeply nested structure
-    let columnName: string | undefined;
+function splitByComma(str: string): string[] {
+  const result: string[] = [];
+  let current = '';
+  let depth = 0;
 
-    // Try different paths based on AST structure
-    if (columnDef.column?.column?.expr?.value) {
-      // Most common: columnDef.column.column.expr.value
-      columnName = String(columnDef.column.column.expr.value);
-    } else if (columnDef.column?.column) {
-      columnName = typeof columnDef.column.column === 'string'
-        ? columnDef.column.column
-        : String(columnDef.column.column);
-    } else if (typeof columnDef.column === 'string') {
-      columnName = columnDef.column;
+  for (let i = 0; i < str.length; i++) {
+    const char = str[i];
+
+    if (char === '(') {
+      depth++;
+      current += char;
+    } else if (char === ')') {
+      depth--;
+      current += char;
+    } else if (char === ',' && depth === 0) {
+      result.push(current);
+      current = '';
+    } else {
+      current += char;
     }
-
-    if (!columnName) {
-      console.error('Could not extract column name from:', columnDef);
-      return null;
-    }
-
-    // Extract data type
-    let dataType: string = 'text';
-    if (columnDef.definition?.dataType) {
-      dataType = String(columnDef.definition.dataType);
-    }
-
-    const format = mapPostgreSQLType(dataType);
-
-    // Check for primary key
-    let isPrimaryKey = false;
-    if (columnDef.primary_key === 'primary key') {
-      isPrimaryKey = true;
-    }
-
-    // Check nullable - handle null value safely
-    let isNotNull = false;
-    if (columnDef.nullable !== null && columnDef.nullable !== undefined) {
-      isNotNull = columnDef.nullable.type === 'not null';
-    }
-
-    // Check default value
-    let defaultValue: any;
-    if (columnDef.default_val && columnDef.default_val.type !== null) {
-      defaultValue = extractDefaultValue(columnDef.default_val);
-    }
-
-    // Check for inline references (foreign key)
-    let foreignKey: string | undefined;
-    if (columnDef.reference_definition) {
-      const refTable = columnDef.reference_definition.table?.[0]?.table;
-      const refColumn = columnDef.reference_definition.definition?.[0]?.column;
-      if (refTable && refColumn) {
-        foreignKey = `${refTable}.${refColumn}`;
-      }
-    }
-
-    return {
-      title: columnName,
-      format: format,
-      type: determineType(format),
-      default: defaultValue,
-      required: isNotNull || isPrimaryKey,
-      pk: isPrimaryKey,
-      fk: foreignKey
-    };
-  } catch (error) {
-    console.error('Error parsing column:', error, 'Column def was:', columnDef);
-    return null;
-  }
-}
-
-/**
- * Process ALTER TABLE statement for foreign keys and primary keys
- */
-function processAlterTable(statement: any, tables: TableState): void {
-  try {
-    const tableInfo = statement.table?.[0];
-    if (!tableInfo) {
-      console.log('ALTER TABLE: no table info found');
-      return;
-    }
-
-    const tableName = tableInfo.table;
-    const tableSchema = tableInfo.db || 'public';
-    const uniqueKey = `${tableSchema}.${tableName}`;
-
-    console.log(`Processing ALTER TABLE for: ${tableName} (key: ${uniqueKey})`);
-
-    const table = tables[uniqueKey];
-    if (!table) {
-      console.warn(`ALTER TABLE: table ${uniqueKey} not found in tables list. Available keys:`, Object.keys(tables));
-      return;
-    }
-
-    // statement.expr is an ARRAY of constraints, not a single object!
-    const constraints = Array.isArray(statement.expr) ? statement.expr : [statement.expr];
-
-    for (const expr of constraints) {
-      if (!expr) continue;
-
-      // Check if this is a constraint definition
-      if (expr.resource === 'constraint' && expr.constraint_type) {
-        const constraint = expr.create_definitions || expr;
-        console.log(`  Found constraint type: ${constraint.constraint_type}`);
-
-        // Handle PRIMARY KEY
-        if (constraint.constraint_type === 'primary key') {
-          const pkColumns = constraint.definition || [];
-          console.log(`  Adding PRIMARY KEY to columns:`, pkColumns.map((c: any) => c.column?.expr?.value || c.column));
-          pkColumns.forEach((pkCol: any) => {
-            const colName = pkCol.column?.expr?.value || pkCol.column;
-            const col = table.columns?.find(c => c.title === colName);
-            if (col) {
-              col.pk = true;
-              col.required = true;
-            }
-          });
-        }
-
-        // Handle FOREIGN KEY
-        if (constraint.constraint_type === 'FOREIGN KEY') {
-          const fkColumns = constraint.definition || [];
-          const refTable = constraint.reference_definition?.table?.[0]?.table;
-          const refColumns = constraint.reference_definition?.definition || [];
-
-          // Extract column names from nested structure
-          const colName = fkColumns[0]?.column?.expr?.value || fkColumns[0]?.column;
-          const refColName = refColumns[0]?.column?.expr?.value || refColumns[0]?.column;
-
-          console.log(`  Adding FOREIGN KEY: ${tableName}.${colName} -> ${refTable}.${refColName}`);
-
-          if (colName && refColName && refTable) {
-            const col = table.columns?.find(c => c.title === colName);
-            if (col) {
-              col.fk = `${refTable}.${refColName}`;
-              console.log(`  ✅ FK added to column: ${colName}`);
-            } else {
-              console.warn(`  ❌ Column ${colName} not found in table ${tableName}`);
-            }
-          }
-        }
-      }
-    }
-  } catch (error) {
-    console.error('Error processing ALTER TABLE:', error);
-  }
-}
-
-/**
- * Extract default value from AST node
- */
-function extractDefaultValue(defaultVal: any): any {
-  if (!defaultVal) return undefined;
-
-  // Handle 'default' wrapper
-  if (defaultVal.type === 'default' && defaultVal.value) {
-    return extractDefaultValue(defaultVal.value);
   }
 
-  if (defaultVal.type === 'single_quote_string' || defaultVal.type === 'string') {
-    return defaultVal.value;
+  if (current.trim()) {
+    result.push(current);
   }
 
-  if (defaultVal.type === 'number') {
-    return defaultVal.value;
-  }
-
-  if (defaultVal.type === 'bool') {
-    return defaultVal.value;
-  }
-
-  if (defaultVal.type === 'function') {
-    // Handle nested function name structure
-    if (defaultVal.name?.name?.[0]?.value) {
-      return `${defaultVal.name.name[0].value}()`;
-    }
-    return `${defaultVal.name}()`;
-  }
-
-  if (defaultVal.type === 'expr_list') {
-    return defaultVal.value?.map((v: any) => v.value).join(', ');
-  }
-
-  return defaultVal.value || undefined;
+  return result;
 }
 
 /**
@@ -362,7 +286,7 @@ function mapPostgreSQLType(pgType: string): string {
   if (type.includes('numeric') || type.includes('decimal')) return 'numeric';
   if (type === 'real') return 'float4';
   if (type === 'double precision' || type === 'double') return 'float8';
-  if (type.includes('float')) return 'float8';
+  if (type.includes('float')) return 'float8'; // FLOAT(n) maps to float8
 
   // String types
   if (type.includes('varchar') || type.includes('character varying')) return 'varchar';
