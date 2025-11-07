@@ -16,11 +16,31 @@ import { useEffect } from 'react';
 
 // Import memory monitor for side effects (exposes window.memoryMonitor)
 import '@/lib/memory-monitor';
+import { validateAndCleanLocalStorage, getStorageSize } from '@/lib/storage-validator';
 
 export default function HomePage() {
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [isImportOpen, setIsImportOpen] = useState(false);
   const { triggerFocusTable, clearCache, tables } = useStore();
+
+  // CRITICAL: Validate and clean localStorage on mount (RUNS FIRST!)
+  useEffect(() => {
+    const initialSize = getStorageSize();
+    console.log(`[App Init] localStorage size: ${(initialSize / 1024 / 1024).toFixed(2)}MB`);
+
+    // Auto-clean corrupted/bloated data
+    validateAndCleanLocalStorage();
+
+    const finalSize = getStorageSize();
+    if (finalSize < initialSize) {
+      const saved = initialSize - finalSize;
+      console.log(`[App Init] Cleaned ${(saved / 1024 / 1024).toFixed(2)}MB of corrupted data`);
+      toast.success('Cache Cleaned', {
+        description: `Removed ${(saved / 1024 / 1024).toFixed(2)}MB of corrupted data`,
+        duration: 3000,
+      });
+    }
+  }, []); // Run only once on mount
 
   // Log memory monitor availability in development
   useEffect(() => {

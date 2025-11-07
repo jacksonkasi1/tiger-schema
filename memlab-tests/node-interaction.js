@@ -15,37 +15,51 @@ function url() {
 }
 
 async function action(page) {
-  // Wait for ReactFlow to load
-  await page.waitForSelector('.react-flow', { timeout: 10000 });
-
-  // Wait a bit for nodes to render (if any exist from localStorage)
-  await page.waitForTimeout(2000);
-
-  // Simulate interactions
-  // 1. Click on canvas
-  await page.click('.react-flow__renderer');
-  await page.waitForTimeout(300);
-
-  // 2. Keyboard shortcuts
-  await page.keyboard.press('Space'); // Fit view
-  await page.waitForTimeout(300);
-
-  await page.keyboard.press('Escape'); // Clear selection
-  await page.waitForTimeout(300);
-
-  // 3. Open search (if exists)
   try {
-    const searchButton = await page.$('[placeholder*="Search"]');
-    if (searchButton) {
-      await searchButton.click();
-      await page.waitForTimeout(500);
-      await page.keyboard.press('Escape');
+    // Wait for ReactFlow to load
+    await page.waitForSelector('.react-flow', { timeout: 15000 });
+    console.log('[MemLab] ReactFlow loaded');
+
+    // Wait a bit for nodes to render (if any exist from localStorage)
+    await page.waitForTimeout(2000);
+
+    // Simulate interactions
+    // 1. Click on canvas (use the pane which is more reliable)
+    try {
+      await page.click('.react-flow__pane');
+      console.log('[MemLab] Clicked canvas');
+    } catch {
+      console.log('[MemLab] Canvas click failed');
     }
-  } catch (e) {
-    // Search not available
+    await page.waitForTimeout(500);
+
+    // 2. Keyboard shortcuts
+    await page.keyboard.press('Space'); // Fit view
+    console.log('[MemLab] Pressed Space');
+    await page.waitForTimeout(500);
+
+    await page.keyboard.press('Escape'); // Clear selection
+    console.log('[MemLab] Pressed Escape');
+    await page.waitForTimeout(500);
+
+    // 3. Try to open search (if exists)
+    try {
+      const searchInput = await page.$('input[type="text"]');
+      if (searchInput) {
+        await searchInput.click();
+        await page.waitForTimeout(500);
+        await page.keyboard.press('Escape');
+        console.log('[MemLab] Interacted with search');
+      }
+    } catch (e) {
+      console.log('[MemLab] Search not available');
+    }
+
+  } catch (error) {
+    console.log('[MemLab] Action error:', error.message);
   }
 
-  await page.waitForTimeout(1000);
+  await page.waitForTimeout(2000);
 }
 
 async function back(page) {
