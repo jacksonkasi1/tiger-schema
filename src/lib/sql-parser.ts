@@ -1,7 +1,110 @@
 import { TableState, Column } from './types';
 
 /**
- * Parse PostgreSQL CREATE TABLE statements into TableState format
+ * Parse SQL schema asynchronously (non-blocking for large files)
+ * Breaks up work into chunks to keep UI responsive
+ */
+export async function parseSQLSchemaAsync(sql: string): Promise<TableState> {
+  const tables: TableState = {};
+
+  // Remove comments
+  let cleanedSQL = sql
+    .replace(/--[^\n]*/g, '')
+    .replace(/\/\*[\s\S]*?\*\//g, '');
+
+  const statements = cleanedSQL.split(';').filter(s => s.trim());
+
+  console.log(`[SQL Parser] Processing ${statements.length} statements...`);
+
+  // Process in batches to avoid blocking
+  const BATCH_SIZE = 10;
+
+  // First pass: CREATE TABLE/VIEW (in batches)
+  for (let i = 0; i < statements.length; i += BATCH_SIZE) {
+    const batch = statements.slice(i, i + BATCH_SIZE);
+
+    // Yield control to browser every batch
+    await new Promise(resolve => setTimeout(resolve, 0));
+
+    for (const statement of batch) {
+      const trimmed = statement.trim();
+
+      // CREATE TABLE
+      const createTableMatch = trimmed.match(
+        /create\s+table\s+(?:if\s+not\s+exists\s+)?(?:["']?(\w+)["']?\.)?["']?(\w+)["']?\s*\(/i
+      );
+
+      if (createTableMatch) {
+        const schemaName = createTableMatch[1] || 'public';
+        const tableName = createTableMatch[2];
+        const columns = parseColumns(statement);
+
+        const uniqueKey = `${schemaName}.${tableName}`;
+        tables[uniqueKey] = {
+          title: tableName,
+          is_view: false,
+          columns: columns,
+          position: { x: 0, y: 0 },
+          schema: schemaName
+        };
+      }
+
+      // CREATE VIEW
+      const createViewMatch = trimmed.match(
+        /create\s+(?:or\s+replace\s+)?view\s+(?:if\s+not\s+exists\s+)?(?:["']?(\w+)["']?\.)?["']?(\w+)["']?\s+as/i
+      );
+
+      if (createViewMatch) {
+        const schemaName = createViewMatch[1] || 'public';
+        const viewName = createViewMatch[2];
+
+        const uniqueKey = `${schemaName}.${viewName}`;
+        tables[uniqueKey] = {
+          title: viewName,
+          is_view: true,
+          columns: [],
+          position: { x: 0, y: 0 },
+          schema: schemaName
+        };
+      }
+    }
+
+    // Log progress every 50 statements
+    if (i % 50 === 0 && i > 0) {
+      console.log(`[SQL Parser] Processed ${i}/${statements.length} statements...`);
+    }
+  }
+
+  console.log(`[SQL Parser] Found ${Object.keys(tables).length} tables/views`);
+
+  // Second pass: ALTER TABLE (in batches)
+  for (let i = 0; i < statements.length; i += BATCH_SIZE) {
+    const batch = statements.slice(i, i + BATCH_SIZE);
+
+    await new Promise(resolve => setTimeout(resolve, 0));
+
+    for (const statement of batch) {
+      const trimmed = statement.trim();
+
+      const alterTableMatch = trimmed.match(/alter\s+table\s+(?:["']?(\w+)["']?\.)?["']?(\w+)["']?/i);
+
+      if (alterTableMatch) {
+        const schemaName = alterTableMatch[1] || 'public';
+        const tableName = alterTableMatch[2];
+        const uniqueKey = `${schemaName}.${tableName}`;
+
+        parseForeignKeysFromAlter(tables, uniqueKey, trimmed);
+        parsePrimaryKeysFromAlter(tables, uniqueKey, trimmed);
+      }
+    }
+  }
+
+  console.log(`[SQL Parser] ✅ Parsing complete`);
+  return tables;
+}
+
+/**
+ * Parse PostgreSQL CREATE TABLE statements into TableState format (SYNCHRONOUS - may block UI)
  */
 export function parseSQLSchema(sql: string): TableState {
   const tables: TableState = {};

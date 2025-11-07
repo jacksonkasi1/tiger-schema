@@ -2,7 +2,7 @@
 
 import { useState, useCallback, useEffect } from 'react';
 import { useStore } from '@/lib/store';
-import { parseSQLSchema } from '@/lib/sql-parser';
+import { parseSQLSchemaAsync } from '@/lib/sql-parser';
 import {
   Dialog,
   DialogContent,
@@ -44,52 +44,55 @@ export function ImportSQL({ open, onClose }: ImportSQLProps) {
     setPendingImport(null);
   }, []);
 
-  const performImport = useCallback((definition: any, paths: any, tableCount: number) => {
-    // Use requestIdleCallback to perform import without blocking UI
-    const scheduleImport = () => {
-      return new Promise<void>((resolve) => {
-        // Break up the work to avoid blocking
-        requestAnimationFrame(() => {
-          setTables(definition, paths);
+  const performImport = useCallback(async (definition: any, paths: any, tableCount: number) => {
+    // Apply tables to store (this triggers React re-renders)
+    console.log('[Import] Applying tables to store...');
 
-          // Give React time to update
-          requestAnimationFrame(() => {
-            // Auto-arrange after import
-            triggerLayout();
-
-            // Fit view after layout
-            setTimeout(() => {
-              triggerFitView();
-              resolve();
-            }, 600);
-          });
-        });
-      });
-    };
-
-    scheduleImport().then(() => {
-      setParseResult({
-        success: true,
-        message: `Successfully imported ${tableCount} table${tableCount > 1 ? 's' : ''}!`,
-        tableCount,
-      });
-
-      toast.success(`Imported ${tableCount} table${tableCount > 1 ? 's' : ''} successfully`);
-
-      // Close dialog after a short delay
+    // Use setTimeout to yield control back to browser
+    await new Promise<void>(resolve => {
       setTimeout(() => {
-        onClose();
-        resetState();
-      }, 1500);
-
-      setIsProcessing(false);
+        setTables(definition, paths);
+        console.log('[Import] Tables set in store');
+        resolve();
+      }, 0);
     });
+
+    // Wait for React to update
+    await new Promise(resolve => setTimeout(resolve, 100));
+
+    // Trigger layout
+    console.log('[Import] Triggering layout...');
+    triggerLayout();
+
+    // Wait for layout to apply
+    await new Promise(resolve => setTimeout(resolve, 300));
+
+    // Fit view
+    console.log('[Import] Fitting view...');
+    triggerFitView();
+
+    // Show success
+    setParseResult({
+      success: true,
+      message: `Successfully imported ${tableCount} table${tableCount > 1 ? 's' : ''}!`,
+      tableCount,
+    });
+
+    toast.success(`Imported ${tableCount} table${tableCount > 1 ? 's' : ''} successfully`);
+
+    setIsProcessing(false);
+
+    // Close dialog after a short delay
+    setTimeout(() => {
+      onClose();
+      resetState();
+    }, 1500);
   }, [setTables, triggerLayout, triggerFitView, onClose, resetState]);
 
-  const handleConfirmOverwrite = useCallback(() => {
+  const handleConfirmOverwrite = useCallback(async () => {
     if (pendingImport) {
       setShowOverwriteConfirm(false);
-      performImport(pendingImport.definition, pendingImport.paths, pendingImport.tableCount);
+      await performImport(pendingImport.definition, pendingImport.paths, pendingImport.tableCount);
     }
   }, [pendingImport, performImport]);
 
@@ -146,9 +149,11 @@ export function ImportSQL({ open, onClose }: ImportSQLProps) {
     try {
       const text = await file.text();
 
-      // Parse the SQL schema
-      const tables = parseSQLSchema(text);
+      // Parse the SQL schema ASYNCHRONOUSLY (non-blocking!)
+      console.log('[Import] Starting async SQL parsing...');
+      const tables = await parseSQLSchemaAsync(text);
       const tableCount = Object.keys(tables).length;
+      console.log('[Import] Parsing complete, found', tableCount, 'tables');
 
       if (tableCount === 0) {
         setParseResult({
@@ -207,13 +212,8 @@ export function ImportSQL({ open, onClose }: ImportSQLProps) {
       }
 
       // No existing schema, import directly
-      performImport(definition, paths, tableCount);
+      await performImport(definition, paths, tableCount);
 
-      // Close dialog after a short delay
-      setTimeout(() => {
-        onClose();
-        resetState();
-      }, 1500);
     } catch (error) {
       console.error('Error parsing SQL file:', error);
       setParseResult({
