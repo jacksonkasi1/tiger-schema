@@ -23,7 +23,10 @@ export function parseSQLSchema(sql: string): TableState {
       if (statement.type === 'create' && statement.keyword === 'table') {
         const tableInfo = extractTableInfo(statement);
         if (tableInfo) {
-          tables[tableInfo.name] = {
+          // Use schema-qualified name as key to avoid collisions (e.g., public.users vs auth.users)
+          const uniqueKey = `${tableInfo.schema}.${tableInfo.name}`;
+
+          tables[uniqueKey] = {
             title: tableInfo.name,
             is_view: false,
             columns: tableInfo.columns,
@@ -37,7 +40,10 @@ export function parseSQLSchema(sql: string): TableState {
       if (statement.type === 'create' && statement.keyword === 'view') {
         const viewInfo = extractViewInfo(statement);
         if (viewInfo) {
-          tables[viewInfo.name] = {
+          // Use schema-qualified name as key
+          const uniqueKey = `${viewInfo.schema}.${viewInfo.name}`;
+
+          tables[uniqueKey] = {
             title: viewInfo.name,
             is_view: true,
             columns: [],
@@ -235,55 +241,65 @@ function processAlterTable(statement: any, tables: TableState): void {
     }
 
     const tableName = tableInfo.table;
-    console.log(`Processing ALTER TABLE for: ${tableName}`);
+    const tableSchema = tableInfo.db || 'public';
+    const uniqueKey = `${tableSchema}.${tableName}`;
 
-    const table = tables[tableName];
+    console.log(`Processing ALTER TABLE for: ${tableName} (key: ${uniqueKey})`);
+
+    const table = tables[uniqueKey];
     if (!table) {
-      console.warn(`ALTER TABLE: table ${tableName} not found in tables list`);
+      console.warn(`ALTER TABLE: table ${uniqueKey} not found in tables list. Available keys:`, Object.keys(tables));
       return;
     }
 
-    // Check for ADD CONSTRAINT
-    if (statement.expr?.type === 'add' && statement.expr.constraint_type) {
-      const constraint = statement.expr;
-      console.log(`  Found constraint type: ${constraint.constraint_type}`);
+    // statement.expr is an ARRAY of constraints, not a single object!
+    const constraints = Array.isArray(statement.expr) ? statement.expr : [statement.expr];
 
-      // Handle PRIMARY KEY
-      if (constraint.constraint_type === 'primary key') {
-        const pkColumns = constraint.definition || [];
-        console.log(`  Adding PRIMARY KEY to columns:`, pkColumns.map((c: any) => c.column));
-        pkColumns.forEach((pkCol: any) => {
-          const colName = pkCol.column;
-          const col = table.columns?.find(c => c.title === colName);
-          if (col) {
-            col.pk = true;
-            col.required = true;
-          }
-        });
-      }
+    for (const expr of constraints) {
+      if (!expr) continue;
 
-      // Handle FOREIGN KEY
-      if (constraint.constraint_type === 'FOREIGN KEY') {
-        const fkColumns = constraint.definition || [];
-        const refTable = constraint.reference_definition?.table?.[0]?.table;
-        const refColumns = constraint.reference_definition?.definition || [];
+      // Check if this is a constraint definition
+      if (expr.resource === 'constraint' && expr.constraint_type) {
+        const constraint = expr.create_definitions || expr;
+        console.log(`  Found constraint type: ${constraint.constraint_type}`);
 
-        console.log(`  Adding FOREIGN KEY: ${tableName}.${fkColumns[0]?.column} -> ${refTable}.${refColumns[0]?.column}`);
+        // Handle PRIMARY KEY
+        if (constraint.constraint_type === 'primary key') {
+          const pkColumns = constraint.definition || [];
+          console.log(`  Adding PRIMARY KEY to columns:`, pkColumns.map((c: any) => c.column?.expr?.value || c.column));
+          pkColumns.forEach((pkCol: any) => {
+            const colName = pkCol.column?.expr?.value || pkCol.column;
+            const col = table.columns?.find(c => c.title === colName);
+            if (col) {
+              col.pk = true;
+              col.required = true;
+            }
+          });
+        }
 
-        if (fkColumns.length > 0 && refColumns.length > 0 && refTable) {
-          const colName = fkColumns[0].column;
-          const refColName = refColumns[0].column;
-          const col = table.columns?.find(c => c.title === colName);
-          if (col) {
-            col.fk = `${refTable}.${refColName}`;
-            console.log(`  ✅ FK added to column: ${colName}`);
-          } else {
-            console.warn(`  ❌ Column ${colName} not found in table ${tableName}`);
+        // Handle FOREIGN KEY
+        if (constraint.constraint_type === 'FOREIGN KEY') {
+          const fkColumns = constraint.definition || [];
+          const refTable = constraint.reference_definition?.table?.[0]?.table;
+          const refColumns = constraint.reference_definition?.definition || [];
+
+          // Extract column names from nested structure
+          const colName = fkColumns[0]?.column?.expr?.value || fkColumns[0]?.column;
+          const refColName = refColumns[0]?.column?.expr?.value || refColumns[0]?.column;
+
+          console.log(`  Adding FOREIGN KEY: ${tableName}.${colName} -> ${refTable}.${refColName}`);
+
+          if (colName && refColName && refTable) {
+            const col = table.columns?.find(c => c.title === colName);
+            if (col) {
+              col.fk = `${refTable}.${refColName}`;
+              console.log(`  ✅ FK added to column: ${colName}`);
+            } else {
+              console.warn(`  ❌ Column ${colName} not found in table ${tableName}`);
+            }
           }
         }
       }
-    } else {
-      console.log(`  No ADD CONSTRAINT found in ALTER TABLE. expr:`, statement.expr);
     }
   } catch (error) {
     console.error('Error processing ALTER TABLE:', error);
