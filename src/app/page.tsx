@@ -7,7 +7,6 @@ import { ChatSidebar } from '@/components/ChatSidebar';
 import { FlowCanvas } from '@/components/flow/FlowCanvas';
 import { ImportSQL } from '@/components/ImportSQL';
 import { SearchBar } from '@/components/SearchBar';
-import { SchemaFilter } from '@/components/flow/SchemaFilter';
 import { Button } from '@/components/ui/button';
 import { Upload, Trash2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -16,7 +15,10 @@ import { useEffect } from 'react';
 
 // Import memory monitor for side effects (exposes window.memoryMonitor)
 import '@/lib/memory-monitor';
-import { validateAndCleanLocalStorage, getStorageSize } from '@/lib/storage-validator';
+import {
+  validateAndCleanLocalStorage,
+  getStorageSize,
+} from '@/lib/storage-validator';
 
 export default function HomePage() {
   const [isChatOpen, setIsChatOpen] = useState(false);
@@ -26,7 +28,11 @@ export default function HomePage() {
   // CRITICAL: Validate and clean localStorage on mount (RUNS FIRST!)
   useEffect(() => {
     const initialSize = getStorageSize();
-    console.log(`[App Init] localStorage size: ${(initialSize / 1024 / 1024).toFixed(2)}MB`);
+    console.log(
+      `[App Init] localStorage size: ${(initialSize / 1024 / 1024).toFixed(
+        2
+      )}MB`
+    );
 
     // Auto-clean corrupted/bloated data
     validateAndCleanLocalStorage();
@@ -34,9 +40,15 @@ export default function HomePage() {
     const finalSize = getStorageSize();
     if (finalSize < initialSize) {
       const saved = initialSize - finalSize;
-      console.log(`[App Init] Cleaned ${(saved / 1024 / 1024).toFixed(2)}MB of corrupted data`);
+      console.log(
+        `[App Init] Cleaned ${(saved / 1024 / 1024).toFixed(
+          2
+        )}MB of corrupted data`
+      );
       toast.success('Cache Cleaned', {
-        description: `Removed ${(saved / 1024 / 1024).toFixed(2)}MB of corrupted data`,
+        description: `Removed ${(saved / 1024 / 1024).toFixed(
+          2
+        )}MB of corrupted data`,
         duration: 3000,
       });
     }
@@ -49,8 +61,12 @@ export default function HomePage() {
       console.log('[Dev] Usage:');
       console.log('  window.memoryMonitor.start() - Start monitoring');
       console.log('  window.memoryMonitor.stop() - Stop and show summary');
-      console.log('  window.memoryMonitor.logLocalStorage() - Show localStorage usage');
-      console.log('  window.memoryMonitor.forceGC() - Force garbage collection (needs --expose-gc)');
+      console.log(
+        '  window.memoryMonitor.logLocalStorage() - Show localStorage usage'
+      );
+      console.log(
+        '  window.memoryMonitor.forceGC() - Force garbage collection (needs --expose-gc)'
+      );
     }
   }, []);
 
@@ -99,7 +115,7 @@ export default function HomePage() {
     <div className="relative w-full h-screen overflow-hidden">
       <div
         className={cn(
-          "absolute inset-0 transition-all duration-300 ease-in-out"
+          'absolute inset-0 transition-all duration-300 ease-in-out'
         )}
       >
         {/* Action buttons - bottom left */}
@@ -128,10 +144,10 @@ export default function HomePage() {
         {/* Search Bar */}
         <SearchBar onJumpToTable={triggerFocusTable} />
 
-        {/* Schema Filter */}
-        <SchemaFilter />
-
-        <Helper onChatOpen={() => setIsChatOpen(!isChatOpen)} isChatOpen={isChatOpen} />
+        <Helper
+          onChatOpen={() => setIsChatOpen(!isChatOpen)}
+          isChatOpen={isChatOpen}
+        />
         <FlowCanvas />
       </div>
       <ChatSidebar isOpen={isChatOpen} onOpenChange={setIsChatOpen} />

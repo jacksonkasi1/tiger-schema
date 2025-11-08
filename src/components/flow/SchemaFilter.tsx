@@ -1,17 +1,29 @@
 'use client';
 
 import { useMemo } from 'react';
-import { Eye, EyeOff, Database } from 'lucide-react';
+import { Eye, EyeOff, Database, X } from 'lucide-react';
 import { useStore } from '@/lib/store';
 import { getAllSchemas, groupTablesBySchema } from '@/lib/flow-utils';
 import { getSchemaColor } from './SchemaGroup';
+import { cn } from '@/lib/utils';
+
+interface SchemaFilterProps {
+  className?: string;
+  onClose?: () => void;
+}
 
 /**
  * SchemaFilter component - Control panel for schema visibility
  * Allows users to show/hide schemas and see table counts
  */
-export function SchemaFilter() {
-  const { tables, visibleSchemas, toggleSchemaVisibility, showAllSchemas, hideAllSchemas } = useStore();
+export function SchemaFilter({ className, onClose }: SchemaFilterProps) {
+  const {
+    tables,
+    visibleSchemas,
+    toggleSchemaVisibility,
+    showAllSchemas,
+    hideAllSchemas,
+  } = useStore();
 
   // Get all schemas and their table counts
   const schemaInfo = useMemo(() => {
@@ -34,17 +46,25 @@ export function SchemaFilter() {
   }
 
   return (
-    <div className="absolute top-5 right-5 z-30 bg-white dark:bg-dark-800 rounded-lg shadow-lg border border-warm-gray-200 dark:border-dark-border p-4 min-w-[240px]">
+    <div
+      className={cn(
+        'bg-white dark:bg-dark-800 rounded-lg shadow-lg border border-warm-gray-200 dark:border-dark-border p-4 min-w-[240px]',
+        'pointer-events-auto',
+        className
+      )}
+    >
       {/* Header */}
-      <div className="flex items-center justify-between mb-3">
+      <div className="flex items-start justify-between gap-3 mb-3">
         <div className="flex items-center gap-2">
-          <Database size={18} className="text-warm-gray-600 dark:text-warm-gray-400" />
+          <Database
+            size={18}
+            className="text-warm-gray-600 dark:text-warm-gray-400"
+          />
           <h3 className="font-semibold text-sm text-warm-gray-800 dark:text-warm-gray-200">
             Schemas
           </h3>
         </div>
 
-        {/* Show All / Hide All */}
         <div className="flex items-center gap-1">
           <button
             onClick={showAllSchemas}
@@ -62,6 +82,16 @@ export function SchemaFilter() {
           >
             Hide All
           </button>
+          {onClose && (
+            <button
+              onClick={onClose}
+              className="ml-1 p-1 rounded hover:bg-warm-gray-100 dark:hover:bg-dark-700 transition-colors"
+              title="Close schema filter"
+              aria-label="Close schema filter"
+            >
+              <X size={14} className="text-warm-gray-500 dark:text-warm-gray-400" />
+            </button>
+          )}
         </div>
       </div>
 
@@ -92,7 +122,10 @@ export function SchemaFilter() {
               {schema.isVisible ? (
                 <Eye size={16} className="text-blue-600 dark:text-blue-400" />
               ) : (
-                <EyeOff size={16} className="text-warm-gray-400 dark:text-warm-gray-600" />
+                <EyeOff
+                  size={16}
+                  className="text-warm-gray-400 dark:text-warm-gray-600"
+                />
               )}
             </div>
           </button>

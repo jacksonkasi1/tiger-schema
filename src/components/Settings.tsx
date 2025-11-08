@@ -5,7 +5,14 @@ import { usePathname, useRouter } from 'next/navigation';
 import { useStore } from '@/lib/store';
 import { useLocalStorage } from '@/lib/hooks';
 import { useTheme } from '@/components/theme-provider';
-import { Github, Network, Bot, Settings as SettingsIcon, Moon, Sun } from 'lucide-react';
+import {
+  Github,
+  Network,
+  Bot,
+  Settings as SettingsIcon,
+  Moon,
+  Sun,
+} from 'lucide-react';
 import Image from 'next/image';
 import {
   Sheet,
@@ -17,16 +24,25 @@ import {
 } from '@/components/ui/sheet';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { cn } from '@/lib/utils';
 
 interface SettingsProps {
   isFetching: boolean;
   setIsFetching: (isFetching: boolean) => void;
+  variant?: 'floating' | 'toolbar';
+  className?: string;
 }
 
-export function Settings({ setIsFetching }: SettingsProps) {
+export function Settings({
+  isFetching: _isFetching,
+  setIsFetching,
+  variant = 'floating',
+  className,
+}: SettingsProps) {
   const router = useRouter();
   const pathname = usePathname();
-  const { supabaseApiKey, setSupabaseApiKey, setTables, autoArrange } = useStore();
+  const { supabaseApiKey, setSupabaseApiKey, setTables, autoArrange } =
+    useStore();
   const [url, setUrl] = useState(supabaseApiKey.url);
   const [anon, setAnon] = useState(supabaseApiKey.anon);
   const [error, setError] = useState('');
@@ -56,7 +72,10 @@ export function Settings({ setIsFetching }: SettingsProps) {
 
       if (res.ok) {
         const contentType = res.headers.get('content-type');
-        if (contentType && contentType.indexOf('application/openapi+json') !== -1) {
+        if (
+          contentType &&
+          contentType.indexOf('application/openapi+json') !== -1
+        ) {
           const data = await res.json();
           if (data.definitions) {
             setDefinitions(data.definitions);
@@ -94,16 +113,27 @@ export function Settings({ setIsFetching }: SettingsProps) {
     if (pathname === '/ai') setIsAINew(false);
   }, [pathname, setIsAINew]);
 
+  const isToolbarVariant = variant === 'toolbar';
+
+  const containerClasses = cn(
+    isToolbarVariant
+      ? 'flex flex-col gap-2'
+      : 'fixed right-5 top-5 z-50 flex flex-col gap-2',
+    'pointer-events-auto',
+    className
+  );
+
   return (
     <>
-      {/* Floating action buttons */}
-      <div className="fixed right-5 top-5 z-50 flex flex-col space-y-2">
+      <div className={containerClasses}>
         <Button
           variant="outline"
           size="icon"
           title="Schema"
           onClick={() => router.push('/')}
-          className={pathname === '/' ? 'bg-primary text-primary-foreground' : ''}
+          className={
+            pathname === '/' ? 'bg-primary text-primary-foreground' : ''
+          }
         >
           <Network size={20} />
         </Button>
@@ -113,7 +143,9 @@ export function Settings({ setIsFetching }: SettingsProps) {
           size="icon"
           title="AI"
           onClick={() => router.push('/ai')}
-          className={`relative ${pathname === '/ai' ? 'bg-primary text-primary-foreground' : ''}`}
+          className={`relative ${
+            pathname === '/ai' ? 'bg-primary text-primary-foreground' : ''
+          }`}
         >
           <Bot size={20} />
           {isAINew && (
@@ -126,12 +158,7 @@ export function Settings({ setIsFetching }: SettingsProps) {
 
         <Sheet open={open} onOpenChange={setOpen}>
           <SheetTrigger asChild>
-            <Button
-              variant="outline"
-              size="icon"
-              title="Settings"
-              className="mt-4"
-            >
+            <Button variant="outline" size="icon" title="Settings">
               <SettingsIcon size={20} />
             </Button>
           </SheetTrigger>
@@ -148,9 +175,7 @@ export function Settings({ setIsFetching }: SettingsProps) {
               <SheetTitle className="text-3xl font-bold bg-gradient-to-r from-green-500 to-green-400 bg-clip-text text-transparent">
                 Supabase Schema
               </SheetTitle>
-              <SheetDescription>
-                Open Source • LocalStorage
-              </SheetDescription>
+              <SheetDescription>Open Source • LocalStorage</SheetDescription>
             </SheetHeader>
 
             <div className="flex items-center justify-center gap-4 mt-2">
@@ -184,10 +209,13 @@ export function Settings({ setIsFetching }: SettingsProps) {
                 </ol>
               </div>
 
-              <form className="space-y-4" onSubmit={(e) => {
-                e.preventDefault();
-                fetchData();
-              }}>
+              <form
+                className="space-y-4"
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  fetchData();
+                }}
+              >
                 <div className="space-y-2">
                   <label htmlFor="url" className="text-sm font-medium">
                     URL
@@ -220,9 +248,7 @@ export function Settings({ setIsFetching }: SettingsProps) {
                   Fetch Schema
                 </Button>
 
-                {error && (
-                  <p className="text-sm text-destructive">{error}</p>
-                )}
+                {error && <p className="text-sm text-destructive">{error}</p>}
               </form>
             </div>
           </SheetContent>
