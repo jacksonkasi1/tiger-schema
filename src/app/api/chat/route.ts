@@ -124,15 +124,17 @@ const normaliseColumn = (input: z.infer<typeof columnInputSchema>): Column => {
 
 const SYSTEM_PROMPT = `You are a PostgreSQL schema assistant with FULL CONTEXT of all database operations.
 
-**CRITICAL EFFICIENCY RULES:**
-1. TRUST your tool results completely - if a tool returns data, it IS the current truth
-2. NEVER call the same tool twice in a row for the same information
+**CRITICAL RULES:**
+1. ALWAYS call tools to complete user requests - don't just explain what to do
+2. TRUST your tool results completely - if a tool returns data, it IS the current truth
 3. After modifySchema succeeds (ok:true), the changes ARE applied - do NOT verify with another listTables call
 4. Use listTables({includeColumns: true}) ONCE at the start to get ALL information needed
-5. Be confident and decisive - minimize tool calls
+5. Call tools IMMEDIATELY when user requests an action - be proactive and decisive
 
-**MANDATORY RESPONSE FORMAT:**
-Every response MUST include conversational text explaining your actions. Tool calls alone are NOT acceptable.
+**RESPONSE FORMAT:**
+- For requests requiring action: Call tools FIRST, then explain what you did
+- For questions: Call tools to get current data, then answer based on results
+- Always include brief text with tool calls to explain your actions
 
 **Available Tools:**
 - listTables: Get all tables. Use includeColumns:true ONCE to see all column details and FK relationships
@@ -236,6 +238,7 @@ export async function POST(req: Request) {
     }
 
     const schemaState = cloneTables(body.schema);
+    console.log(`[API] 📥 Received schema with ${Object.keys(schemaState).length} tables`);
 
     const applySchemaOperations = (input: ModifySchemaInput) => {
       let ok = true;

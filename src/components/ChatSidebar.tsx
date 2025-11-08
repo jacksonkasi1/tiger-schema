@@ -248,6 +248,9 @@ export function ChatSidebar({
 
     // Send the message using AI SDK 5 pattern
     // IMPORTANT: Pass schema here to ensure we use the current state, not stale cached state
+    const schemaTableCount = Object.keys(tables).length;
+    console.log(`[ChatSidebar] 📤 Sending message with ${schemaTableCount} tables in schema`);
+
     await sendMessage(
       { text: input },
       {
