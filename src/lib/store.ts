@@ -137,6 +137,7 @@ export const useStore = create<AppState>((set, get) => ({
   setTables: (definition: any, paths: any) => {
     const tableGroup: TableState = {};
     const currentTables = get().tables;
+    const newSchemas = new Set<string>();
 
     for (const [key, value] of Object.entries(definition)) {
       const colGroup: Column[] = [];
@@ -161,6 +162,7 @@ export const useStore = create<AppState>((set, get) => ({
       const keyParts = key.split('.');
       const schema = keyParts.length > 1 ? keyParts[0] : 'public';
       const tableName = keyParts.length > 1 ? keyParts.slice(1).join('.') : key;
+      newSchemas.add(schema);
 
       // Preserve existing position if table already exists
       tableGroup[key] = {
@@ -175,6 +177,19 @@ export const useStore = create<AppState>((set, get) => ({
     }
 
     set({ tables: tableGroup });
+    
+    // Ensure all new schemas are visible when importing
+    const currentVisibleSchemas = get().visibleSchemas;
+    if (currentVisibleSchemas.size === 0) {
+      // If no schemas are visible, show all new schemas
+      set({ visibleSchemas: newSchemas });
+    } else {
+      // Add new schemas to visible set if they don't exist
+      const updatedVisibleSchemas = new Set(currentVisibleSchemas);
+      newSchemas.forEach(schema => updatedVisibleSchemas.add(schema));
+      set({ visibleSchemas: updatedVisibleSchemas });
+    }
+    
     get().saveToLocalStorage();
   },
 

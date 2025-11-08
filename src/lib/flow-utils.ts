@@ -34,48 +34,67 @@ export function tablesToEdges(tables: TableState): FlowEdge[] {
 
     table.columns.forEach((column, sourceIndex) => {
       if (column.fk) {
-        // Parse FK format: "table_name.column_name"
-        const [targetTable, targetColumn] = column.fk.split('.');
+        // Parse FK format: "schema.table.column" or "table.column"
+        const fkParts = column.fk.split('.');
 
-        if (targetTable && targetColumn) {
-          const edgeId = `${table.title}.${column.title}-${targetTable}.${targetColumn}`;
-
-          // Find target column index in target table
-          const targetTableData = tables[targetTable];
-          const targetIndex = targetTableData?.columns?.findIndex(
-            (col) => col.title === targetColumn
-          ) ?? -1;
-
-          if (targetIndex === -1) {
-            console.warn(`Target column ${targetColumn} not found in table ${targetTable}`);
-            return;
-          }
-
-          // Create unique handle IDs matching TableNode format: tableName_columnName_index
-          const sourceHandleId = `${table.title}_${column.title}_${sourceIndex}`;
-          const targetHandleId = `${targetTable}_${targetColumn}_${targetIndex}`;
-
-          edges.push({
-            id: edgeId,
-            source: table.title,
-            target: targetTable,
-            sourceHandle: sourceHandleId,
-            targetHandle: targetHandleId,
-            type: 'smoothstep',
-            animated: false,
-            markerEnd: {
-              type: MarkerType.ArrowClosed,
-              width: 20,
-              height: 20,
-              color: '#6B7280', // gray-500
-            },
-            data: {
-              sourceColumn: column.title,
-              targetColumn: targetColumn,
-              relationshipType: 'one-to-many',
-            },
-          });
+        if (fkParts.length < 2) {
+          console.warn(
+            `Invalid FK format for column ${column.title} in table ${table.title}: ${column.fk}`
+          );
+          return;
         }
+
+        let targetSchema = table.schema || 'public';
+        let targetTableName: string;
+        const targetColumn = fkParts.pop()!;
+
+        if (fkParts.length === 1) {
+          targetTableName = fkParts[0];
+        } else {
+          targetSchema = fkParts.shift() || targetSchema;
+          targetTableName = fkParts.join('.');
+        }
+
+        const targetTableKey = `${targetSchema}.${targetTableName}`;
+
+        const edgeId = `${table.title}.${column.title}-${targetTableKey}.${targetColumn}`;
+
+        // Find target column index in target table
+        const targetTableData = tables[targetTableKey];
+        const targetIndex =
+          targetTableData?.columns?.findIndex((col) => col.title === targetColumn) ?? -1;
+
+        if (targetIndex === -1) {
+          console.warn(
+            `Target column ${targetColumn} not found in table ${targetTableKey}`
+          );
+          return;
+        }
+
+        // Create unique handle IDs matching TableNode format: tableName_columnName_index
+        const sourceHandleId = `${table.title}_${column.title}_${sourceIndex}`;
+        const targetHandleId = `${targetTableKey}_${targetColumn}_${targetIndex}`;
+
+        edges.push({
+          id: edgeId,
+          source: table.title,
+          target: targetTableKey,
+          sourceHandle: sourceHandleId,
+          targetHandle: targetHandleId,
+          type: 'smoothstep',
+          animated: false,
+          markerEnd: {
+            type: MarkerType.ArrowClosed,
+            width: 20,
+            height: 20,
+            color: '#6B7280', // gray-500
+          },
+          data: {
+            sourceColumn: column.title,
+            targetColumn: targetColumn,
+            relationshipType: 'one-to-many',
+          },
+        });
       }
     });
   });

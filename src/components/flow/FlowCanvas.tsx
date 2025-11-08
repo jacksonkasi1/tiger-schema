@@ -74,12 +74,21 @@ function FlowCanvasInner() {
     reactFlowRef.current = { fitView, zoomIn, zoomOut, getZoom };
   }, [fitView, zoomIn, zoomOut, getZoom]);
 
-  // Convert tables to nodes and edges when tables change (NON-BLOCKING)
+  // Track pending layout trigger to auto-trigger after nodes are set
+  const pendingLayoutRef = useRef(false);
+  const currentLayoutTriggerRef = useRef(0);
+  const isApplyingLayoutRef = useRef(false);
+
+  // Convert tables to nodes and edges when tables change (ASYNC to prevent blocking)
   useEffect(() => {
-    // Use queueMicrotask instead of setTimeout - it can't be canceled!
-    // This ensures conversion ALWAYS completes even during rapid re-renders
-    queueMicrotask(() => {
-      console.log('[FlowCanvas] Converting tables to nodes/edges...');
+    // Use setTimeout(0) to yield to browser rendering, preventing UI freeze
+    const timeoutId = setTimeout(() => {
+      console.log('[FlowCanvas] Converting tables to nodes/edges...', {
+        tableCount: Object.keys(tables).length,
+        visibleSchemasSize: visibleSchemas.size,
+        visibleSchemas: Array.from(visibleSchemas),
+        isApplyingLayout: isApplyingLayoutRef.current
+      });
 
       // Filter tables by visible schemas
       const filteredTables = Object.entries(tables).reduce((acc, [key, table]) => {
@@ -124,27 +133,85 @@ function FlowCanvasInner() {
       setNodes(flowNodes);
       setEdges(flowEdges);
       console.log('[FlowCanvas] Nodes/edges set');
-    });
-    // No cleanup needed - queueMicrotask always completes
-  }, [tables, visibleSchemas, setNodes, setEdges, getEdgeRelationship]);
+
+      // Reset pending flag if tables are empty
+      if (flowNodes.length === 0) {
+        pendingLayoutRef.current = false;
+        return;
+      }
+
+      // If layout was triggered before nodes were ready, trigger it now
+      // Use double requestAnimationFrame to ensure React has fully processed state updates
+      if (pendingLayoutRef.current && flowNodes.length > 0 && flowEdges.length > 0 && !isApplyingLayoutRef.current) {
+        isApplyingLayoutRef.current = true;
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => {
+            console.log('[FlowCanvas] Auto-triggering layout after nodes set');
+            const layoutedNodes = getLayoutedNodesWithSchemas(flowNodes, flowEdges, { direction: 'TB' });
+            setNodes(layoutedNodes);
+
+            // Update positions in store
+            layoutedNodes.forEach((node) => {
+              updateTablePosition(node.id, node.position.x, node.position.y);
+            });
+
+            // Fit view after layout
+            setTimeout(() => {
+              reactFlowRef.current.fitView({ padding: 0.2, duration: 400 });
+              isApplyingLayoutRef.current = false;
+            }, 50);
+
+            pendingLayoutRef.current = false;
+            currentLayoutTriggerRef.current = 0;
+          });
+        });
+      }
+    }, 0);
+
+    return () => {
+      clearTimeout(timeoutId);
+    };
+  }, [tables, visibleSchemas, setNodes, setEdges, getEdgeRelationship, updateTablePosition]);
 
   // Listen for layout trigger from store
   useEffect(() => {
-    if (layoutTrigger > 0 && nodes.length > 0 && edges.length > 0) {
-      const layoutedNodes = getLayoutedNodesWithSchemas(nodes, edges, { direction: 'TB' });
-      setNodes(layoutedNodes);
-
-      // Update positions in store
-      layoutedNodes.forEach((node) => {
-        updateTablePosition(node.id, node.position.x, node.position.y);
-      });
-
-      // Fit view after layout
-      setTimeout(() => {
-        reactFlowRef.current.fitView({ padding: 0.2, duration: 400 });
-      }, 50);
+    // Skip if we're currently applying layout to prevent infinite loops
+    if (isApplyingLayoutRef.current) {
+      return;
     }
-  }, [layoutTrigger, nodes.length, edges.length]); // Only depend on length, not entire arrays
+
+    // Only process if trigger actually changed (prevents duplicate runs)
+    if (layoutTrigger > 0 && layoutTrigger !== currentLayoutTriggerRef.current) {
+      currentLayoutTriggerRef.current = layoutTrigger;
+      
+      if (nodes.length > 0 && edges.length > 0) {
+        // Nodes are ready, layout immediately
+        console.log('[FlowCanvas] Layout triggered, nodes ready');
+        isApplyingLayoutRef.current = true;
+        
+        // Use requestAnimationFrame to ensure we're not blocking
+        requestAnimationFrame(() => {
+          const layoutedNodes = getLayoutedNodesWithSchemas(nodes, edges, { direction: 'TB' });
+          setNodes(layoutedNodes);
+
+          // Update positions in store
+          layoutedNodes.forEach((node) => {
+            updateTablePosition(node.id, node.position.x, node.position.y);
+          });
+
+          // Fit view after layout
+          setTimeout(() => {
+            reactFlowRef.current.fitView({ padding: 0.2, duration: 400 });
+            isApplyingLayoutRef.current = false;
+          }, 50);
+        });
+      } else {
+        // Nodes not ready yet, mark as pending
+        console.log('[FlowCanvas] Layout triggered but nodes not ready, marking as pending');
+        pendingLayoutRef.current = true;
+      }
+    }
+  }, [layoutTrigger, nodes.length, edges.length, setNodes, updateTablePosition]); // Only depend on length, not entire arrays
 
   // Listen for fit view trigger from store
   useEffect(() => {

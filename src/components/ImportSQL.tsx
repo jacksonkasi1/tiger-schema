@@ -11,7 +11,14 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { Upload, FileText, CheckCircle2, XCircle, Loader2, AlertTriangle } from 'lucide-react';
+import {
+  Upload,
+  FileText,
+  CheckCircle2,
+  XCircle,
+  Loader2,
+  AlertTriangle,
+} from 'lucide-react';
 import { toast } from 'sonner';
 
 interface ImportSQLProps {
@@ -44,56 +51,58 @@ export function ImportSQL({ open, onClose }: ImportSQLProps) {
     setPendingImport(null);
   }, []);
 
-  const performImport = useCallback(async (definition: any, paths: any, tableCount: number) => {
-    console.log('[Import] Starting import process...');
+  const performImport = useCallback(
+    (definition: any, paths: any, tableCount: number) => {
+      console.log('[Import] Starting import process...');
 
-    // Set tables in store (FlowCanvas will defer node/edge conversion)
-    console.log('[Import] Setting tables...');
-    setTables(definition, paths);
-
-    // Wait for FlowCanvas to convert tables to nodes/edges
-    // (FlowCanvas useEffect is deferred via setTimeout(0))
-    console.log('[Import] Waiting for nodes/edges conversion...');
-    await new Promise(resolve => setTimeout(resolve, 500));
-
-    // Trigger layout
-    console.log('[Import] Triggering layout...');
-    triggerLayout();
-
-    // Wait for layout to apply (dagre calculation + ReactFlow render)
-    console.log('[Import] Waiting for layout...');
-    await new Promise(resolve => setTimeout(resolve, 700));
-
-    // Fit view
-    console.log('[Import] Fitting view...');
-    triggerFitView();
-
-    // Wait for fit view animation
-    await new Promise(resolve => setTimeout(resolve, 400));
-
-    // Show success
-    console.log('[Import] ✅ Import complete!');
-    setParseResult({
-      success: true,
-      message: `Successfully imported ${tableCount} table${tableCount > 1 ? 's' : ''}!`,
-      tableCount,
-    });
-
-    toast.success(`Imported ${tableCount} table${tableCount > 1 ? 's' : ''} successfully`);
-
-    setIsProcessing(false);
-
-    // Close dialog after a short delay
-    setTimeout(() => {
+      // Close dialog FIRST to unblock UI - this must happen synchronously
+      setIsProcessing(false);
       onClose();
       resetState();
-    }, 1500);
-  }, [setTables, triggerLayout, triggerFitView, onClose, resetState]);
 
-  const handleConfirmOverwrite = useCallback(async () => {
+      // Show success message immediately
+      toast.success(
+        `Imported ${tableCount} table${tableCount > 1 ? 's' : ''} successfully`
+      );
+
+      // Use double requestAnimationFrame to ensure dialog has closed and rendered
+      // before doing heavy work
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          console.log('[Import] Setting tables...');
+          setTables(definition, paths);
+          console.log('[Import] Tables set');
+
+          // Schedule layout after React has processed the table update
+          requestAnimationFrame(() => {
+            requestAnimationFrame(() => {
+              console.log('[Import] Triggering layout...');
+              triggerLayout();
+
+              // Schedule fit view after layout completes
+              setTimeout(() => {
+                console.log('[Import] Fitting view...');
+                triggerFitView();
+              }, 800);
+            });
+          });
+        });
+      });
+
+      console.log('[Import] ✅ Import complete!');
+    },
+    [setTables, triggerLayout, triggerFitView, onClose, resetState]
+  );
+
+  const handleConfirmOverwrite = useCallback(() => {
     if (pendingImport) {
       setShowOverwriteConfirm(false);
-      await performImport(pendingImport.definition, pendingImport.paths, pendingImport.tableCount);
+      setIsProcessing(true);
+      performImport(
+        pendingImport.definition,
+        pendingImport.paths,
+        pendingImport.tableCount
+      );
     }
   }, [pendingImport, performImport]);
 
@@ -122,7 +131,10 @@ export function ImportSQL({ open, onClose }: ImportSQLProps) {
 
     const files = Array.from(e.dataTransfer.files);
     const sqlFile = files.find(
-      (f) => f.name.endsWith('.sql') || f.type === 'application/sql' || f.type === 'text/plain'
+      (f) =>
+        f.name.endsWith('.sql') ||
+        f.type === 'application/sql' ||
+        f.type === 'text/plain'
     );
 
     if (sqlFile) {
@@ -133,13 +145,16 @@ export function ImportSQL({ open, onClose }: ImportSQLProps) {
     }
   }, []);
 
-  const handleFileInput = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    const { files } = e.target;
-    if (files && files.length > 0) {
-      setFile(files[0]);
-      setParseResult(null);
-    }
-  }, []);
+  const handleFileInput = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      const { files } = e.target;
+      if (files && files.length > 0) {
+        setFile(files[0]);
+        setParseResult(null);
+      }
+    },
+    []
+  );
 
   const handleImport = useCallback(async () => {
     if (!file) return;
@@ -152,14 +167,15 @@ export function ImportSQL({ open, onClose }: ImportSQLProps) {
 
       // Parse the SQL schema ASYNCHRONOUSLY (non-blocking!)
       console.log('[Import] Starting async SQL parsing...');
-      const tables = await parseSQLSchemaAsync(text);
-      const tableCount = Object.keys(tables).length;
+      const parsedTables = await parseSQLSchemaAsync(text);
+      const tableCount = Object.keys(parsedTables).length;
       console.log('[Import] Parsing complete, found', tableCount, 'tables');
 
       if (tableCount === 0) {
         setParseResult({
           success: false,
-          message: 'No tables found in the SQL file. Please check the file format.',
+          message:
+            'No tables found in the SQL file. Please check the file format.',
         });
         toast.error('No tables found in SQL file');
         setIsProcessing(false);
@@ -171,7 +187,7 @@ export function ImportSQL({ open, onClose }: ImportSQLProps) {
       const definition: any = {};
       const paths: any = {};
 
-      Object.entries(tables).forEach(([name, table]) => {
+      Object.entries(parsedTables).forEach(([name, table]) => {
         // Build definition object
         const properties: any = {};
         const required: string[] = [];
@@ -181,7 +197,11 @@ export function ImportSQL({ open, onClose }: ImportSQLProps) {
             type: col.type,
             format: col.format,
             default: col.default,
-            description: col.pk ? '<pk/>' : col.fk ? `\`${col.fk}\`` : undefined,
+            description: col.pk
+              ? '<pk/>'
+              : col.fk
+              ? `\`${col.fk}\``
+              : undefined,
           };
 
           if (col.required) {
@@ -201,7 +221,7 @@ export function ImportSQL({ open, onClose }: ImportSQLProps) {
         }
       });
 
-      // Check if schema already exists
+      // Check if schema already exists in the store
       const hasExistingSchema = Object.keys(tables).length > 0;
 
       if (hasExistingSchema) {
@@ -213,16 +233,16 @@ export function ImportSQL({ open, onClose }: ImportSQLProps) {
       }
 
       // No existing schema, import directly
-      await performImport(definition, paths, tableCount);
-
+      performImport(definition, paths, tableCount);
     } catch (error) {
       console.error('Error parsing SQL file:', error);
       setParseResult({
         success: false,
-        message: `Error parsing SQL file: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        message: `Error parsing SQL file: ${
+          error instanceof Error ? error.message : 'Unknown error'
+        }`,
       });
       toast.error('Failed to parse SQL file');
-    } finally {
       setIsProcessing(false);
     }
   }, [file, tables, performImport]);
@@ -249,8 +269,8 @@ export function ImportSQL({ open, onClose }: ImportSQLProps) {
         <DialogHeader>
           <DialogTitle>Import SQL Schema</DialogTitle>
           <DialogDescription>
-            Upload a PostgreSQL schema file (.sql) to visualize your database structure.
-            Supports CREATE TABLE and CREATE VIEW statements.
+            Upload a PostgreSQL schema file (.sql) to visualize your database
+            structure. Supports CREATE TABLE and CREATE VIEW statements.
           </DialogDescription>
         </DialogHeader>
 
@@ -263,9 +283,10 @@ export function ImportSQL({ open, onClose }: ImportSQLProps) {
             className={`
               relative border-2 border-dashed rounded-lg p-8
               transition-colors duration-200 ease-in-out
-              ${isDragging
-                ? 'border-primary bg-primary/5'
-                : 'border-muted-foreground/25 hover:border-muted-foreground/50'
+              ${
+                isDragging
+                  ? 'border-primary bg-primary/5'
+                  : 'border-muted-foreground/25 hover:border-muted-foreground/50'
               }
               ${file ? 'bg-muted/50' : ''}
             `}
@@ -325,9 +346,10 @@ export function ImportSQL({ open, onClose }: ImportSQLProps) {
             <div
               className={`
                 flex items-start space-x-2 p-4 rounded-lg
-                ${parseResult.success
-                  ? 'bg-green-500/10 text-green-700 dark:text-green-400'
-                  : 'bg-red-500/10 text-red-700 dark:text-red-400'
+                ${
+                  parseResult.success
+                    ? 'bg-green-500/10 text-green-700 dark:text-green-400'
+                    : 'bg-red-500/10 text-red-700 dark:text-red-400'
                 }
               `}
             >
@@ -349,10 +371,7 @@ export function ImportSQL({ open, onClose }: ImportSQLProps) {
             >
               Cancel
             </Button>
-            <Button
-              onClick={handleImport}
-              disabled={!file || isProcessing}
-            >
+            <Button onClick={handleImport} disabled={!file || isProcessing}>
               {isProcessing ? (
                 <>
                   <Loader2 className="w-4 h-4 mr-2 animate-spin" />
@@ -370,7 +389,10 @@ export function ImportSQL({ open, onClose }: ImportSQLProps) {
       </DialogContent>
 
       {/* Overwrite Confirmation Dialog */}
-      <Dialog open={showOverwriteConfirm} onOpenChange={setShowOverwriteConfirm}>
+      <Dialog
+        open={showOverwriteConfirm}
+        onOpenChange={setShowOverwriteConfirm}
+      >
         <DialogContent className="max-w-md">
           <DialogHeader>
             <div className="flex items-center gap-3">
@@ -378,8 +400,13 @@ export function ImportSQL({ open, onClose }: ImportSQLProps) {
               <DialogTitle>Overwrite Existing Schema?</DialogTitle>
             </div>
             <DialogDescription className="pt-2">
-              You currently have <strong>{Object.keys(tables).length} table{Object.keys(tables).length !== 1 ? 's' : ''}</strong> in your schema.
-              Importing this SQL file will <strong>replace all existing tables</strong>.
+              You currently have{' '}
+              <strong>
+                {Object.keys(tables).length} table
+                {Object.keys(tables).length !== 1 ? 's' : ''}
+              </strong>{' '}
+              in your schema. Importing this SQL file will{' '}
+              <strong>replace all existing tables</strong>.
             </DialogDescription>
           </DialogHeader>
 
@@ -387,22 +414,17 @@ export function ImportSQL({ open, onClose }: ImportSQLProps) {
             {pendingImport && (
               <div className="bg-muted p-4 rounded-lg">
                 <p className="text-sm">
-                  <strong>New schema:</strong> {pendingImport.tableCount} table{pendingImport.tableCount !== 1 ? 's' : ''} will be imported
+                  <strong>New schema:</strong> {pendingImport.tableCount} table
+                  {pendingImport.tableCount !== 1 ? 's' : ''} will be imported
                 </p>
               </div>
             )}
 
             <div className="flex justify-end space-x-2 pt-4">
-              <Button
-                variant="outline"
-                onClick={handleCancelOverwrite}
-              >
+              <Button variant="outline" onClick={handleCancelOverwrite}>
                 Cancel
               </Button>
-              <Button
-                variant="destructive"
-                onClick={handleConfirmOverwrite}
-              >
+              <Button variant="destructive" onClick={handleConfirmOverwrite}>
                 Overwrite Schema
               </Button>
             </div>
