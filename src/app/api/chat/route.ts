@@ -122,26 +122,36 @@ const normaliseColumn = (input: z.infer<typeof columnInputSchema>): Column => {
   };
 };
 
-const SYSTEM_PROMPT = `You are an expert PostgreSQL & Supabase schema assistant embedded inside a diagramming tool.
+const SYSTEM_PROMPT = `You are a PostgreSQL schema assistant. You have tools to inspect and modify the database schema.
 
-CRITICAL RULES:
-1. ALWAYS respond with conversational text - never end your response with just a tool call
-2. After using ANY tool, you MUST explain what you found or did in plain English
-3. Use tools to inspect or modify the schema, then describe the results
-4. Be concise but always include a text response
+**MANDATORY RESPONSE FORMAT:**
+Every response MUST include conversational text explaining your actions. Tool calls alone are NOT acceptable responses.
 
-When a user asks a question:
-- First, use the appropriate tool (listSchemas, listTables, getTableDetails, modifySchema)
-- Then, provide a clear text summary of what you found or changed
+**Process:**
+1. Use tools to get/modify data
+2. ALWAYS write a text response explaining what you did/found
 
-Examples:
-- User: "How many tables do I have?"
-  → Call listTables tool → Respond: "You have 8 tables in your schema: users, posts, comments..."
+**Tools:**
+- listTables: Get all tables (includes column info with includeColumns:true)
+- getTableDetails: Get specific table details
+- modifySchema: Create/drop/alter tables
 
-- User: "Delete the users table"
-  → Call modifySchema tool → Respond: "I've deleted the users table and all related tables..."
+**Examples:**
 
-Never fabricate data—only report what the tools return.`;
+User: "list tables"
+→ Call: listTables()
+→ Response: "You have 8 tables: users, posts, comments, categories, post_categories, reactions, user_profiles, and post_stats."
+
+User: "delete users table"
+→ Call: listTables({includeColumns: true}) to see FK relationships
+→ Call: modifySchema([{action: "drop_table", tableId: "users"}, {action: "drop_table", tableId: "user_profiles"}, ...])
+→ Response: "I've deleted the users table and all related tables (user_profiles, posts, comments, reactions) that had foreign keys to it."
+
+**CRITICAL:**
+- Be efficient - don't call getTableDetails multiple times when listTables provides the same info
+- Check FK relationships from column.fk property
+- ALWAYS end with a text explanation`;
+
 
 export async function POST(req: Request) {
   try {
@@ -427,7 +437,7 @@ export async function POST(req: Request) {
       }),
       listTables: tool({
         description:
-          'List tables in the current workspace. Provide schema or search filters when needed.',
+          'List all tables. Use includeColumns:true to see column details and FK relationships (column.fk property). After calling, ALWAYS explain the results in plain text.',
         inputSchema: listTablesParams,
         execute: async (params: z.infer<typeof listTablesParams>) => {
           const {
@@ -509,8 +519,8 @@ export async function POST(req: Request) {
       system: SYSTEM_PROMPT,
       messages: modelMessages,
       maxRetries: 1,
+      temperature: 0.7, // Slightly higher temperature for more verbose responses
       tools,
-      // The improved system prompt now ensures the model always responds with text
     });
 
     return result.toUIMessageStreamResponse();

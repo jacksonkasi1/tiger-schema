@@ -68,7 +68,7 @@ export function ChatSidebar({
   const chatEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  // Create transport with configuration
+  // Create transport with configuration (updates when tables change)
   const transport = useMemo(
     () =>
       new DefaultChatTransport({
@@ -77,11 +77,16 @@ export function ChatSidebar({
           provider: aiProvider === 'google' ? 'google' : 'openai',
           apiKey: aiProvider === 'google' ? googleApiKey : openaiApiKey,
           model: aiProvider === 'google' ? googleModel : openaiModel,
-          schema: tables,
+          schema: tables, // This will update when tables change
         },
       }),
     [aiProvider, googleApiKey, openaiApiKey, googleModel, openaiModel, tables]
   );
+
+  // Log schema sent to API for debugging
+  useEffect(() => {
+    console.log('[ChatSidebar] Current tables state:', Object.keys(tables).length, 'tables');
+  }, [tables]);
 
   // Use Vercel AI SDK 5's useChat hook
   const {
@@ -93,40 +98,52 @@ export function ChatSidebar({
     id: 'sql-assistant',
     transport,
     onFinish: ({ message }) => {
-      console.log('[onFinish] Message:', message);
-      console.log('[onFinish] Parts:', message.parts);
+      console.log('[onFinish] Full message object:', JSON.stringify(message, null, 2));
+      console.log('[onFinish] Message parts:', message.parts);
 
-      // Check if any tool results include schema updates
-      const toolParts = message.parts.filter(
-        (part: any) => {
-          console.log('[onFinish] Part:', part);
-          return part.type === 'tool' && part.toolName === 'modifySchema' && part.result;
-        }
-      );
+      // Check ALL parts for debugging
+      message.parts.forEach((part: any, index: number) => {
+        console.log(`[onFinish] Part ${index}:`, {
+          type: part.type,
+          hasOutput: !!(part as any).output,
+          output: (part as any).output,
+        });
+      });
 
-      console.log('[onFinish] Tool parts with modifySchema:', toolParts);
+      // Look for modifySchema tool calls
+      let schemaUpdated = false;
 
-      toolParts.forEach((tool: any) => {
-        const result = tool.result;
-        console.log('[onFinish] modifySchema result:', result);
+      message.parts.forEach((part: any) => {
+        // Check if this is a modifySchema tool (type starts with "tool-")
+        if (part.type === 'tool-modifySchema' && part.output) {
+          console.log('[onFinish] Found modifySchema tool output:', part.output);
 
-        if (result && typeof result === 'object' && 'tables' in result) {
-          console.log('[onFinish] Updating tables from AI:', result.tables);
-          updateTablesFromAI(result.tables);
+          // The result is in part.output, not part.result!
+          const output = part.output;
 
-          const count = Array.isArray(result.operationsApplied)
-            ? result.operationsApplied.length
-            : 0;
+          if (output && typeof output === 'object' && 'tables' in output) {
+            console.log('[onFinish] Applying schema update with tables:', Object.keys(output.tables));
+            updateTablesFromAI(output.tables);
+            schemaUpdated = true;
 
-          if (count > 0) {
-            toast.success('Schema updated', {
-              description: `Applied ${count} change${count === 1 ? '' : 's'} via AI.`,
-            });
-          } else {
-            toast.success('Schema updated');
+            const count = Array.isArray(output.operationsApplied)
+              ? output.operationsApplied.length
+              : 0;
+
+            if (count > 0) {
+              toast.success('Schema updated', {
+                description: `Applied ${count} operation${count === 1 ? '' : 's'}`,
+              });
+            } else {
+              toast.success('Schema updated');
+            }
           }
         }
       });
+
+      if (!schemaUpdated) {
+        console.log('[onFinish] No schema updates detected in this message');
+      }
     },
     onError: (error) => {
       console.error('Chat error:', error);
@@ -335,20 +352,26 @@ export function ChatSidebar({
                   <div className="flex justify-start">
                     <div className="bg-muted/50 rounded-2xl px-4 py-3 max-w-[85%] space-y-3">
                         {/* Render text parts */}
-                        {message.parts.map((part: any, partIndex: number) => {
-                          if (part.type === 'text') {
-                            return (
-                              <div key={partIndex} className="text-sm whitespace-pre-wrap">
-                                {part.text || (
-                                  <span className="text-muted-foreground animate-pulse">
-                                    Thinking...
-                                  </span>
-                                )}
-                              </div>
-                            );
-                          }
-                          return null;
-                        })}
+                        {message.parts.filter((p: any) => p.type === 'text').length > 0 ? (
+                          message.parts.map((part: any, partIndex: number) => {
+                            if (part.type === 'text') {
+                              return (
+                                <div key={partIndex} className="text-sm whitespace-pre-wrap">
+                                  {part.text || (
+                                    <span className="text-muted-foreground animate-pulse">
+                                      Thinking...
+                                    </span>
+                                  )}
+                                </div>
+                              );
+                            }
+                            return null;
+                          })
+                        ) : (
+                          <div className="text-sm text-muted-foreground italic">
+                            Tool executed (no text response generated)
+                          </div>
+                        )}
 
                         {/* Show tool invocations if any */}
                         {message.parts.some((p: any) => p.type === 'tool') && (
