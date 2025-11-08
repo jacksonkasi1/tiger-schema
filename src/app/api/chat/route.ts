@@ -122,35 +122,69 @@ const normaliseColumn = (input: z.infer<typeof columnInputSchema>): Column => {
   };
 };
 
-const SYSTEM_PROMPT = `You are a PostgreSQL schema assistant. You have tools to inspect and modify the database schema.
+const SYSTEM_PROMPT = `You are a PostgreSQL schema assistant with FULL CONTEXT of all database operations.
+
+**CRITICAL EFFICIENCY RULES:**
+1. TRUST your tool results completely - if a tool returns data, it IS the current truth
+2. NEVER call the same tool twice in a row for the same information
+3. After modifySchema succeeds (ok:true), the changes ARE applied - do NOT verify with another listTables call
+4. Use listTables({includeColumns: true}) ONCE at the start to get ALL information needed
+5. Be confident and decisive - minimize tool calls
 
 **MANDATORY RESPONSE FORMAT:**
-Every response MUST include conversational text explaining your actions. Tool calls alone are NOT acceptable responses.
+Every response MUST include conversational text explaining your actions. Tool calls alone are NOT acceptable.
 
-**Process:**
-1. Use tools to get/modify data
-2. ALWAYS write a text response explaining what you did/found
+**Available Tools:**
+- listTables: Get all tables. Use includeColumns:true ONCE to see all column details and FK relationships
+- getTableDetails: Get specific table details (AVOID if you already called listTables with includeColumns)
+- listSchemas: List database schemas
+- modifySchema: Apply schema changes (create/drop/alter tables/columns). Returns updated state with ok:true on success.
 
-**Tools:**
-- listTables: Get all tables (includes column info with includeColumns:true)
-- getTableDetails: Get specific table details
-- modifySchema: Create/drop/alter tables
+**FK Relationship Detection:**
+Column foreign keys are in the fk property: { title: "user_id", fk: "users.id" }
+When deleting a table, you must delete all tables that reference it via FK.
 
-**Examples:**
+**OPTIMAL CONVERSATION PATTERNS:**
+
+❌ BAD (inefficient - 4 tool calls):
+User: "delete users table"
+→ listTables()                           // Gets basic info
+→ listTables({includeColumns: true})     // Gets detailed info (redundant!)
+→ modifySchema([...])                     // Makes changes
+→ listTables()                            // Verifies (unnecessary!)
+Response: "Deleted."
+
+✅ GOOD (efficient - 2 tool calls):
+User: "delete users table"
+→ listTables({includeColumns: true})     // Get everything needed in ONE call
+→ modifySchema([                          // Make all changes at once
+    {action: "drop_table", tableId: "user_profiles"},
+    {action: "drop_table", tableId: "posts"},
+    {action: "drop_table", tableId: "comments"},
+    {action: "drop_table", tableId: "reactions"},
+    {action: "drop_table", tableId: "users"}
+  ])
+Response: "I've deleted the users table and 4 related tables (user_profiles, posts, comments, reactions) that had foreign keys to it. Your database now has 3 tables remaining."
+
+**More Examples:**
 
 User: "list tables"
-→ Call: listTables()
-→ Response: "You have 8 tables: users, posts, comments, categories, post_categories, reactions, user_profiles, and post_stats."
+→ listTables()
+Response: "You have 8 tables: users, posts, comments, categories, post_categories, reactions, user_profiles, and post_stats."
 
-User: "delete users table"
-→ Call: listTables({includeColumns: true}) to see FK relationships
-→ Call: modifySchema([{action: "drop_table", tableId: "users"}, {action: "drop_table", tableId: "user_profiles"}, ...])
-→ Response: "I've deleted the users table and all related tables (user_profiles, posts, comments, reactions) that had foreign keys to it."
+User: "show me the users table"
+→ listTables({includeColumns: true})  // Get all tables with columns (efficient for future queries)
+Response: "The users table has 9 columns: id (integer, primary key), email (varchar), username (varchar), password_hash (text), role (enum: admin/author/reader), is_active (boolean), last_login (timestamptz), created_at (timestamptz), and updated_at (timestamptz)."
 
-**CRITICAL:**
-- Be efficient - don't call getTableDetails multiple times when listTables provides the same info
-- Check FK relationships from column.fk property
-- ALWAYS end with a text explanation`;
+User: "add a phone column to users"
+→ modifySchema([{action: "add_column", tableId: "users", column: {title: "phone", type: "string", format: "varchar", required: false}}])
+Response: "Added a phone column (varchar, optional) to the users table."
+
+**REMEMBER:**
+- Be efficient: minimize tool calls by getting all info in one call
+- Be confident: trust tool results and don't verify unnecessarily
+- Be clear: always explain what you did in plain English
+- Be accurate: when reporting counts, use the actual numbers from tool results`;
 
 
 export async function POST(req: Request) {
@@ -415,7 +449,7 @@ export async function POST(req: Request) {
     const tools = {
       listSchemas: tool({
         description:
-          'List schemas currently present in the in-memory workspace.',
+          'List database schemas in the workspace. Use this only when user explicitly asks about schemas.',
         inputSchema: listSchemasParams,
         execute: async ({
           includeSystem,
@@ -437,7 +471,7 @@ export async function POST(req: Request) {
       }),
       listTables: tool({
         description:
-          'List all tables. Use includeColumns:true to see column details and FK relationships (column.fk property). After calling, ALWAYS explain the results in plain text.',
+          'List all tables in the workspace. IMPORTANT: Use includeColumns:true to get full column details including FK relationships (column.fk property). This is more efficient than calling getTableDetails multiple times. Always explain results conversationally.',
         inputSchema: listTablesParams,
         execute: async (params: z.infer<typeof listTablesParams>) => {
           const {
@@ -472,7 +506,7 @@ export async function POST(req: Request) {
           });
 
           const sliced = filtered.slice(offset, offset + limit);
-          return {
+          const result = {
             total: filtered.length,
             tables: sliced.map(([tableId, table]) => ({
               id: tableId,
@@ -483,10 +517,14 @@ export async function POST(req: Request) {
               columns: includeColumns ? table.columns ?? [] : undefined,
             })),
           };
+
+          console.log(`[listTables] Returning ${result.tables.length} of ${result.total} tables (includeColumns: ${includeColumns})`);
+          return result;
         },
       }),
       getTableDetails: tool({
-        description: 'Fetch the full definition of a single table.',
+        description:
+          'Get full details of a single specific table. WARNING: If you already called listTables with includeColumns:true, DO NOT use this - you already have the data! Only use when you need details of ONE specific table.',
         inputSchema: getTableParams,
         execute: async ({ tableId }: z.infer<typeof getTableParams>) => {
           const table = schemaState[tableId];
@@ -505,9 +543,31 @@ export async function POST(req: Request) {
       }),
       modifySchema: tool({
         description:
-          'Apply schema modifications (create/drop/alter tables and columns).',
+          'Apply schema changes (create/drop/alter tables and columns). Returns the complete updated schema state with ok:true on success. IMPORTANT: After this succeeds, the changes ARE applied - do NOT call listTables to verify!',
         inputSchema: modifySchemaParams,
-        execute: async (input: ModifySchemaInput) => applySchemaOperations(input),
+        execute: async (input: ModifySchemaInput) => {
+          const result = applySchemaOperations(input);
+
+          // Add summary for better AI understanding
+          const successCount = result.operationsApplied.filter(
+            (op) => op.status === 'success'
+          ).length;
+
+          console.log(`[modifySchema] Applied ${successCount} of ${input.operations.length} operations. Schema now has ${Object.keys(schemaState).length} tables.`);
+
+          return {
+            ...result,
+            summary: {
+              totalTables: Object.keys(schemaState).length,
+              operationsRequested: input.operations.length,
+              operationsSuccessful: successCount,
+              operationsFailed: result.operationsApplied.length - successCount,
+              message: result.ok
+                ? `Successfully applied ${successCount} operations. Database now has ${Object.keys(schemaState).length} tables.`
+                : `Failed to apply some operations. Check operationsApplied for details.`,
+            },
+          };
+        },
       }),
     };
 

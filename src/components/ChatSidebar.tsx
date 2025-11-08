@@ -98,51 +98,84 @@ export function ChatSidebar({
     id: 'sql-assistant',
     transport,
     onFinish: ({ message }) => {
-      console.log('[onFinish] Full message object:', JSON.stringify(message, null, 2));
-      console.log('[onFinish] Message parts:', message.parts);
-
-      // Check ALL parts for debugging
-      message.parts.forEach((part: any, index: number) => {
-        console.log(`[onFinish] Part ${index}:`, {
-          type: part.type,
-          hasOutput: !!(part as any).output,
-          output: (part as any).output,
-        });
+      console.log('[onFinish] Processing message:', {
+        id: message.id,
+        role: message.role,
+        partCount: message.parts.length,
+        partTypes: message.parts.map((p: any) => p.type),
       });
 
-      // Look for modifySchema tool calls
+      let toolsExecuted = 0;
       let schemaUpdated = false;
 
-      message.parts.forEach((part: any) => {
-        // Check if this is a modifySchema tool (type starts with "tool-")
-        if (part.type === 'tool-modifySchema' && part.output) {
-          console.log('[onFinish] Found modifySchema tool output:', part.output);
+      message.parts.forEach((part: any, index: number) => {
+        // Check if this is any tool call
+        if (part.type?.startsWith('tool-')) {
+          toolsExecuted++;
 
-          // The result is in part.output, not part.result!
-          const output = part.output;
+          console.log(`[onFinish] Tool ${toolsExecuted} (Part ${index}):`, {
+            type: part.type,
+            state: part.state,
+            hasOutput: !!part.output,
+            hasResult: !!part.result,
+            outputKeys: part.output ? Object.keys(part.output) : [],
+            resultKeys: part.result ? Object.keys(part.result) : [],
+          });
+        }
 
-          if (output && typeof output === 'object' && 'tables' in output) {
-            console.log('[onFinish] Applying schema update with tables:', Object.keys(output.tables));
-            updateTablesFromAI(output.tables);
-            schemaUpdated = true;
+        // Check for modifySchema tool - handle different possible structures
+        const isModifyTool =
+          part.type === 'tool-modifySchema' ||
+          (part.type?.startsWith('tool-') && part.toolName === 'modifySchema');
 
-            const count = Array.isArray(output.operationsApplied)
-              ? output.operationsApplied.length
-              : 0;
+        if (!isModifyTool) return;
 
-            if (count > 0) {
-              toast.success('Schema updated', {
-                description: `Applied ${count} operation${count === 1 ? '' : 's'}`,
-              });
-            } else {
-              toast.success('Schema updated');
-            }
-          }
+        // Handle different output structures (SDK may use 'output' or 'result')
+        const output = part.output || part.result;
+
+        // Check if output contains tables
+        if (output && typeof output === 'object' && 'tables' in output) {
+          const tableCount = Object.keys(output.tables).length;
+          const operationCount = Array.isArray(output.operationsApplied)
+            ? output.operationsApplied.length
+            : 0;
+
+          console.log(`[onFinish] 🎯 Applying schema update:`, {
+            tableCount,
+            operationCount,
+            operations: output.operationsApplied,
+          });
+
+          // Update the Zustand store with new tables
+          updateTablesFromAI(output.tables);
+          schemaUpdated = true;
+
+          // Show success toast with details
+          toast.success('Schema updated successfully', {
+            description:
+              operationCount > 0
+                ? `${operationCount} operation${operationCount === 1 ? '' : 's'} applied • ${tableCount} table${tableCount === 1 ? '' : 's'} in workspace`
+                : `${tableCount} table${tableCount === 1 ? '' : 's'} in workspace`,
+          });
+        } else {
+          console.warn('[onFinish] modifySchema tool found but no valid output:', {
+            hasOutput: !!output,
+            outputType: typeof output,
+            hasTables: output && 'tables' in output,
+          });
         }
       });
 
-      if (!schemaUpdated) {
-        console.log('[onFinish] No schema updates detected in this message');
+      console.log('[onFinish] Summary:', {
+        toolsExecuted,
+        schemaUpdated,
+        finalTableCount: Object.keys(tables).length,
+      });
+
+      if (toolsExecuted > 0 && !schemaUpdated) {
+        console.log(
+          '[onFinish] ⚠️ Tools executed but no schema updates detected'
+        );
       }
     },
     onError: (error) => {
