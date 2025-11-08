@@ -102,6 +102,7 @@ function FlowCanvasInner() {
   const pendingLayoutRef = useRef(false);
   const currentLayoutTriggerRef = useRef(0);
   const isApplyingLayoutRef = useRef(false);
+  const fitViewRetryTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // Convert tables to nodes and edges when tables change (ASYNC to prevent blocking)
   useEffect(() => {
@@ -118,7 +119,7 @@ function FlowCanvasInner() {
       // Check if any schemas exist in the database
       const allSchemas = getAllSchemas(tables);
       const hasSchemas = allSchemas.length > 0;
-      
+
       const filteredTables = Object.entries(tables).reduce(
         (acc, [key, table]) => {
           if (!hasSchemas) {
@@ -139,7 +140,13 @@ function FlowCanvasInner() {
       );
 
       const flowNodes = tablesToNodes(filteredTables);
-      const flowEdges = tablesToEdges(filteredTables).map((edge) => {
+      // Ensure all nodes have unique IDs
+      const nodesWithUniqueIds = flowNodes.map((node, index) => ({
+        ...node,
+        id: node.id || `node-${index}`, // Fallback ID if missing
+      }));
+
+      const flowEdges = tablesToEdges(filteredTables).map((edge, index) => {
         const relationshipType = getEdgeRelationship(edge.id);
 
         const markerEnd = {
@@ -166,6 +173,7 @@ function FlowCanvasInner() {
 
         return {
           ...edge,
+          id: edge.id || `edge-${index}`, // Ensure edge has ID
           type: 'custom',
           markerEnd,
           markerStart,
@@ -178,14 +186,14 @@ function FlowCanvasInner() {
       });
 
       console.log(
-        `[FlowCanvas] Setting ${flowNodes.length} nodes and ${flowEdges.length} edges`
+        `[FlowCanvas] Setting ${nodesWithUniqueIds.length} nodes and ${flowEdges.length} edges`
       );
-      setNodes(flowNodes);
+      setNodes(nodesWithUniqueIds);
       setEdges(flowEdges);
       console.log('[FlowCanvas] Nodes/edges set');
 
       // Reset pending flag if tables are empty
-      if (flowNodes.length === 0) {
+      if (nodesWithUniqueIds.length === 0) {
         pendingLayoutRef.current = false;
         return;
       }
@@ -194,7 +202,7 @@ function FlowCanvasInner() {
       // Use double requestAnimationFrame to ensure React has fully processed state updates
       if (
         pendingLayoutRef.current &&
-        flowNodes.length > 0 &&
+        nodesWithUniqueIds.length > 0 &&
         flowEdges.length > 0 &&
         !isApplyingLayoutRef.current
       ) {
@@ -203,7 +211,7 @@ function FlowCanvasInner() {
           requestAnimationFrame(() => {
             console.log('[FlowCanvas] Auto-triggering layout after nodes set');
             const layoutedNodes = getLayoutedNodesWithSchemas(
-              flowNodes,
+              nodesWithUniqueIds,
               flowEdges,
               { direction: 'TB' }
             );
@@ -270,11 +278,23 @@ function FlowCanvasInner() {
             updateTablePosition(node.id, node.position.x, node.position.y);
           });
 
-          // Fit view after layout
-          setTimeout(() => {
-            reactFlowRef.current.fitView({ padding: 0.2, duration: 400 });
-            isApplyingLayoutRef.current = false;
-          }, 50);
+          // Fit view after layout - retry if ReactFlow isn't ready
+          let retryCount = 0;
+          const maxRetries = 20; // Maximum 1 second of retries (20 * 50ms)
+          const attemptFitView = () => {
+            if (reactFlowRef.current?.fitView) {
+              reactFlowRef.current.fitView({ padding: 0.2, duration: 400 });
+              isApplyingLayoutRef.current = false;
+            } else if (retryCount < maxRetries) {
+              retryCount++;
+              // Retry after a short delay if ReactFlow isn't ready yet
+              setTimeout(attemptFitView, 50);
+            } else {
+              // Max retries reached, stop trying
+              isApplyingLayoutRef.current = false;
+            }
+          };
+          setTimeout(attemptFitView, 50);
         });
       } else {
         // Nodes not ready yet, mark as pending
@@ -294,33 +314,65 @@ function FlowCanvasInner() {
 
   // Listen for fit view trigger from store
   useEffect(() => {
-    if (fitViewTrigger > 0) {
-      reactFlowRef.current.fitView({ padding: 0.2, duration: 400 });
+    // Clear any pending retry
+    if (fitViewRetryTimeoutRef.current) {
+      clearTimeout(fitViewRetryTimeoutRef.current);
+      fitViewRetryTimeoutRef.current = null;
     }
+
+    if (fitViewTrigger > 0) {
+      let retryCount = 0;
+      const maxRetries = 20; // Maximum 1 second of retries (20 * 50ms)
+      const attemptFitView = () => {
+        if (reactFlowRef.current?.fitView) {
+          reactFlowRef.current.fitView({ padding: 0.2, duration: 400 });
+          fitViewRetryTimeoutRef.current = null;
+        } else if (retryCount < maxRetries) {
+          retryCount++;
+          // Retry after a short delay if ReactFlow isn't ready yet
+          fitViewRetryTimeoutRef.current = setTimeout(attemptFitView, 50);
+        } else {
+          fitViewRetryTimeoutRef.current = null;
+        }
+      };
+      attemptFitView();
+    }
+
+    // Cleanup on unmount or when trigger changes
+    return () => {
+      if (fitViewRetryTimeoutRef.current) {
+        clearTimeout(fitViewRetryTimeoutRef.current);
+        fitViewRetryTimeoutRef.current = null;
+      }
+    };
   }, [fitViewTrigger]);
 
   // Listen for zoom in trigger
   useEffect(() => {
-    if (zoomInTrigger > 0) {
+    if (zoomInTrigger > 0 && reactFlowRef.current?.zoomIn) {
       reactFlowRef.current.zoomIn({ duration: 200 });
       setTimeout(() => {
-        const zoom = reactFlowRef.current.getZoom();
-        window.dispatchEvent(
-          new CustomEvent('reactflow:zoom', { detail: { zoom } })
-        );
+        const zoom = reactFlowRef.current?.getZoom?.();
+        if (zoom !== undefined) {
+          window.dispatchEvent(
+            new CustomEvent('reactflow:zoom', { detail: { zoom } })
+          );
+        }
       }, 250);
     }
   }, [zoomInTrigger]);
 
   // Listen for zoom out trigger
   useEffect(() => {
-    if (zoomOutTrigger > 0) {
+    if (zoomOutTrigger > 0 && reactFlowRef.current?.zoomOut) {
       reactFlowRef.current.zoomOut({ duration: 200 });
       setTimeout(() => {
-        const zoom = reactFlowRef.current.getZoom();
-        window.dispatchEvent(
-          new CustomEvent('reactflow:zoom', { detail: { zoom } })
-        );
+        const zoom = reactFlowRef.current?.getZoom?.();
+        if (zoom !== undefined) {
+          window.dispatchEvent(
+            new CustomEvent('reactflow:zoom', { detail: { zoom } })
+          );
+        }
       }, 250);
     }
   }, [zoomOutTrigger]);
@@ -329,7 +381,7 @@ function FlowCanvasInner() {
   useEffect(() => {
     if (focusTableTrigger > 0 && focusTableId) {
       const node = nodes.find((n) => n.id === focusTableId);
-      if (node) {
+      if (node && reactFlowRef.current?.fitView) {
         reactFlowRef.current.fitView({
           nodes: [node],
           padding: 0.3,
@@ -346,18 +398,22 @@ function FlowCanvasInner() {
 
   // Emit initial zoom level (only once on mount)
   useEffect(() => {
-    const zoom = reactFlowRef.current.getZoom();
-    window.dispatchEvent(
-      new CustomEvent('reactflow:zoom', { detail: { zoom } })
-    );
+    const zoom = reactFlowRef.current?.getZoom?.();
+    if (zoom !== undefined) {
+      window.dispatchEvent(
+        new CustomEvent('reactflow:zoom', { detail: { zoom } })
+      );
+    }
   }, []); // Empty deps - only run once
 
   // Handle ReactFlow zoom changes to update display
   const onMove = useCallback(() => {
-    const zoom = reactFlowRef.current.getZoom();
-    window.dispatchEvent(
-      new CustomEvent('reactflow:zoom', { detail: { zoom } })
-    );
+    const zoom = reactFlowRef.current?.getZoom?.();
+    if (zoom !== undefined) {
+      window.dispatchEvent(
+        new CustomEvent('reactflow:zoom', { detail: { zoom } })
+      );
+    }
   }, []); // No deps - use ref
 
   // Keyboard shortcuts (memoized to prevent re-creation)

@@ -28,10 +28,16 @@ export function getLayoutedNodes(
 
   // Add nodes to dagre graph
   nodes.forEach((node) => {
+    // Ensure node has valid data
+    if (!node.data || !node.id) {
+      console.warn(`Skipping node with invalid data:`, node);
+      return;
+    }
+
     const dimensions = calculateNodeDimensions({
-      title: node.data.title,
-      columns: node.data.columns,
-      is_view: node.data.is_view,
+      title: node.data.title || node.id, // Fallback to node.id if title is missing
+      columns: node.data.columns || [],
+      is_view: node.data.is_view || false,
     });
 
     dagreGraph.setNode(node.id, {

@@ -135,11 +135,17 @@ export function calculateNodeDimensions(table: Table) {
   const height = headerHeight + (columnsCount * columnHeight) + padding;
 
   // Calculate width based on longest text
+  const titleLength = table.title?.length || 0;
+  const columnLengths = table.columns?.map(col => {
+    const colTitleLength = col?.title?.length || 0;
+    const colFormatLength = col?.format?.length || 0;
+    return colTitleLength + colFormatLength;
+  }) || [];
+
   const longestText = Math.max(
-    table.title.length,
-    ...(table.columns?.map(col =>
-      col.title.length + col.format.length
-    ) || [])
+    titleLength,
+    ...columnLengths,
+    0 // Ensure at least 0
   );
 
   const width = Math.min(
