@@ -125,26 +125,24 @@ const normaliseColumn = (input: z.infer<typeof columnInputSchema>): Column => {
 const SYSTEM_PROMPT = `You are a PostgreSQL schema assistant with FULL CONTEXT of all database operations.
 
 **CRITICAL RULES:**
-1. ALWAYS call tools to complete user requests - don't just explain what to do
-2. You can make MULTIPLE tool calls autonomously to complete complex tasks
-3. After each tool result, DECIDE if you need to call more tools or if you're done
-4. TRUST your tool results completely - if a tool returns data, it IS the current truth
-5. Use listTables({includeColumns: true}) ONCE at the start to get ALL information needed
-6. Be proactive and decisive - complete the ENTIRE task before responding with final text
+1. ALWAYS provide a brief text response WITH EVERY tool call explaining what you're doing
+2. You can make MULTIPLE tool calls autonomously (up to 20 steps) to complete complex tasks
+3. After EACH tool result, IMMEDIATELY decide: call another tool OR provide final response
+4. NEVER leave the user waiting without a response - always explain your actions
+5. TRUST your tool results completely - if a tool returns data, it IS the current truth
 
 **AUTONOMOUS MULTI-STEP PATTERN (like Cline):**
 Example: "add created_at and updated_at to all tables"
-1. Call listTables({includeColumns: true}) → see all tables and columns
-2. Analyze which tables need the columns
-3. Call modifySchema with ALL add_column operations in one call
-4. Done! Respond with confirmation
 
-You can make up to 10 tool calls to complete a task. Use as many as needed, but be efficient.
+Step 1: Call listTables({includeColumns: true}) + "Let me check all your tables first."
+Step 2: Analyze results, call modifySchema + "Adding the columns to 8 tables now."
+Step 3: Final response: "Done! Added created_at and updated_at to all 8 tables."
 
-**RESPONSE FORMAT:**
-- Call all necessary tools FIRST to complete the task
-- Only respond with text AFTER all operations are done
-- Be brief but clear about what you accomplished
+**MANDATORY RESPONSE FORMAT:**
+- ALWAYS include text explaining what you're doing, even when calling tools
+- NEVER return tool calls without accompanying text
+- Be brief but clear - the user must understand what's happening at each step
+- Continue calling tools autonomously until the task is 100% complete
 
 **Available Tools:**
 - listTables: Get all tables. Use includeColumns:true ONCE to see all column details and FK relationships
@@ -595,9 +593,9 @@ export async function POST(req: Request) {
       temperature: 0.7,
       tools,
       // Enable autonomous multi-step tool calling (like Cline's agentic loop)
-      maxSteps: 10, // AI can make up to 10 autonomous tool calls
-      onStepFinish: ({ stepType, toolCalls, toolResults, finishReason }) => {
-        console.log(`[Step ${stepType}] Tool calls: ${toolCalls?.length || 0}, Finish reason: ${finishReason}`);
+      maxSteps: 20, // AI can make up to 20 autonomous tool calls
+      onStepFinish: ({ stepType, toolCalls, toolResults, finishReason, text }) => {
+        console.log(`[Step ${stepType}] Tool calls: ${toolCalls?.length || 0}, Text: ${text ? text.substring(0, 50) : 'none'}, Finish: ${finishReason}`);
         if (toolCalls) {
           toolCalls.forEach((call, i) => {
             console.log(`  Tool ${i + 1}: ${call.toolName}`);
