@@ -428,24 +428,11 @@ export const useStore = create<AppState>((set, get) => {
         let removedCount = 0;
 
         Object.entries(loadedTables).forEach(([key, table]: [string, any]) => {
-          const hasValidKey = Boolean(key && key.trim() !== '');
+          const hasValidKey = key && key.trim() !== '';
           const hasColumns =
-            table &&
-            Array.isArray(table.columns) &&
-            table.columns.length > 0;
+            table && Array.isArray(table.columns) && table.columns.length > 0;
 
-          if (!hasValidKey) {
-            console.warn(
-              '[initializeFromLocalStorage] Removing table with empty key'
-            );
-            removedCount++;
-            return;
-          }
-
-          if (!hasColumns) {
-            console.warn(
-              `[initializeFromLocalStorage] Removing dummy table "${key}" - no columns`
-            );
+          if (!hasValidKey || !hasColumns) {
             removedCount++;
             return;
           }
