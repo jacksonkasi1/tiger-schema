@@ -80,6 +80,42 @@ const checkView = (title: string, paths: any) => {
   return false;
 };
 
+const sanitizeTables = (tables: TableState) => {
+  const cleaned: TableState = {};
+  let removedTables = 0;
+  let removedColumns = 0;
+
+  Object.entries(tables).forEach(([key, table]) => {
+    if (!key || !key.trim()) {
+      removedTables++;
+      return;
+    }
+
+    const columns = Array.isArray(table?.columns) ? table.columns : [];
+    const validColumns = columns.filter(
+      (column) => column && typeof column.title === 'string' && column.title.trim()
+    );
+
+    if (validColumns.length === 0) {
+      removedTables++;
+      removedColumns += columns.length;
+      return;
+    }
+
+    cleaned[key] = {
+      ...table,
+      title: table.title || key,
+      columns: validColumns,
+    };
+  });
+
+  return {
+    tables: cleaned,
+    removedTables,
+    removedColumns,
+  };
+};
+
 // Debounced localStorage save to prevent excessive writes
 let saveTimeoutId: NodeJS.Timeout | null = null;
 const SAVE_DEBOUNCE_MS = 500; // Wait 500ms before saving
@@ -218,15 +254,24 @@ export const useStore = create<AppState>((set, get) => {
   setTables: (definition: any, paths: any) => {
     const tableGroup: TableState = {};
     const currentTables = get().tables;
-    const newSchemas = new Set<string>();
 
-    for (const [key, value] of Object.entries(definition)) {
-      const colGroup: Column[] = [];
+    for (const [rawKey, value] of Object.entries(definition)) {
+      const key = typeof rawKey === 'string' ? rawKey.trim() : '';
       const tableValue = value as any;
+      const properties = tableValue?.properties;
 
-      Object.keys(tableValue.properties).forEach((colKey: string) => {
-        const colVal = tableValue.properties[colKey];
-        const col: Column = {
+      if (
+        !key ||
+        !properties ||
+        typeof properties !== 'object' ||
+        Object.keys(properties).length === 0
+      ) {
+        continue;
+      }
+
+      const colGroup: Column[] = Object.keys(properties).map((colKey: string) => {
+        const colVal = properties[colKey];
+        return {
           title: colKey,
           format: colVal.format?.split(' ')[0] || '',
           type: colVal.type,
@@ -237,20 +282,11 @@ export const useStore = create<AppState>((set, get) => {
           enumTypeName: colVal.enumTypeName,
           enumValues: colVal.enumValues,
         };
-        colGroup.push(col);
       });
 
-      // Extract schema from key if present (e.g., "public.users" -> "public")
-      // Keys with schema are in format "schema.tablename"
-      // If no schema is present, don't default to 'public' - use undefined instead
       const keyParts = key.split('.');
       const schema = keyParts.length > 1 ? keyParts[0] : undefined;
-      // Only add to schemas set if schema is actually present
-      if (schema) {
-        newSchemas.add(schema);
-      }
 
-      // Preserve existing position if table already exists
       tableGroup[key] = {
         title: key,
         is_view: checkView(key, paths),
@@ -258,21 +294,32 @@ export const useStore = create<AppState>((set, get) => {
         position: currentTables[key]
           ? currentTables[key].position
           : { x: 0, y: 0 },
-        schema: schema, // Extract and set schema from key
+        schema,
       };
     }
 
-    set({ tables: tableGroup });
+    const { tables: sanitizedTables, removedTables } = sanitizeTables(tableGroup);
+    set({ tables: sanitizedTables });
+    if (removedTables > 0) {
+      console.log(
+        `[setTables] Sanitized ${removedTables} invalid table definition(s)`
+      );
+    }
     
     // Ensure all new schemas are visible when importing
+    const sanitizedSchemas = new Set(
+      Object.values(sanitizedTables)
+        .map((table) => table.schema)
+        .filter(Boolean) as string[]
+    );
     const currentVisibleSchemas = get().visibleSchemas;
     if (currentVisibleSchemas.size === 0) {
       // If no schemas are visible, show all new schemas
-      set({ visibleSchemas: newSchemas });
+      set({ visibleSchemas: sanitizedSchemas });
     } else {
       // Add new schemas to visible set if they don't exist
       const updatedVisibleSchemas = new Set(currentVisibleSchemas);
-      newSchemas.forEach(schema => updatedVisibleSchemas.add(schema));
+      sanitizedSchemas.forEach((schema) => updatedVisibleSchemas.add(schema));
       set({ visibleSchemas: updatedVisibleSchemas });
     }
     
@@ -304,8 +351,14 @@ export const useStore = create<AppState>((set, get) => {
       const mergedVisibleSchemas = new Set(state.visibleSchemas);
       discoveredSchemas.forEach((schema) => mergedVisibleSchemas.add(schema));
 
+      const { tables: sanitizedTables, removedTables } = sanitizeTables(nextTables);
+
+      if (removedTables > 0) {
+        console.log(`[updateTablesFromAI] Sanitized ${removedTables} invalid table(s) from AI response`);
+      }
+
       return {
-        tables: nextTables,
+        tables: sanitizedTables,
         visibleSchemas: mergedVisibleSchemas,
       };
     });
@@ -314,15 +367,22 @@ export const useStore = create<AppState>((set, get) => {
   },
 
   updateTablePosition: (tableId, x, y) => {
-    set((state) => ({
-      tables: {
-        ...state.tables,
-        [tableId]: {
-          ...state.tables[tableId],
-          position: { x, y },
+    set((state) => {
+      const existing = state.tables[tableId];
+      if (!existing) {
+        return state;
+      }
+
+      return {
+        tables: {
+          ...state.tables,
+          [tableId]: {
+            ...existing,
+            position: { x, y },
+          },
         },
-      },
-    }));
+      };
+    });
     get().saveToLocalStorage();
   },
 
@@ -458,7 +518,17 @@ export const useStore = create<AppState>((set, get) => {
     try {
       const tablesData = localStorage.getItem('table-list');
       if (tablesData) {
-        set({ tables: JSON.parse(tablesData) });
+        const loadedTables = JSON.parse(tablesData);
+        const { tables: cleanedTables, removedTables } = sanitizeTables(loadedTables);
+
+        if (removedTables > 0) {
+          console.log(
+            `[initializeFromLocalStorage] Cleaned up ${removedTables} dummy table(s)`
+          );
+          localStorage.setItem('table-list', JSON.stringify(cleanedTables));
+        }
+
+        set({ tables: cleanedTables });
       }
 
       const viewData = localStorage.getItem('view');
