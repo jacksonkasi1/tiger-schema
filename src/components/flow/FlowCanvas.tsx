@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState, useRef } from 'react';
 import {
   ReactFlow,
   Background,
@@ -19,12 +19,17 @@ import { TableNode } from './TableNode';
 import { ViewNode } from './ViewNode';
 import { CustomEdge } from './CustomEdge';
 import { RelationshipSelector } from './RelationshipSelector';
-import { ContextMenu, createNodeContextMenu, createEdgeContextMenu } from './ContextMenu';
-import { tablesToNodes, tablesToEdges } from '@/lib/flow-utils';
-import { getLayoutedNodes } from '@/lib/layout';
-import { RelationshipType } from '@/types/flow';
+import {
+  ContextMenu,
+  createNodeContextMenu,
+  createEdgeContextMenu,
+} from './ContextMenu';
+import { tablesToNodes, tablesToEdges, getAllSchemas } from '@/lib/flow-utils';
+import { getLayoutedNodesWithSchemas } from '@/lib/layout';
+import { RelationshipType, FlowEdge } from '@/types/flow';
 import { MarkerType } from '@xyflow/react';
 import { toast } from 'sonner';
+import { Table, TableState } from '@/lib/types';
 
 const nodeTypes = {
   table: TableNode,
@@ -35,11 +40,106 @@ const edgeTypes = {
   custom: CustomEdge,
 };
 
+type CopiedTableEntry = {
+  key: string;
+  table: Table;
+};
+
+type CopiedSelection = {
+  tables: CopiedTableEntry[];
+  center: {
+    x: number;
+    y: number;
+  };
+};
+
+const cloneTable = (table: Table): Table =>
+  JSON.parse(JSON.stringify(table));
+
+const buildCandidateKey = (
+  schema: string | undefined,
+  baseName: string,
+  attempt: number
+) => {
+  const suffix = attempt === 1 ? '_copy' : `_copy_${attempt}`;
+  const nameWithSuffix = `${baseName}${suffix}`;
+  return schema ? `${schema}.${nameWithSuffix}` : nameWithSuffix;
+};
+
+const createUniqueTableKey = (
+  baseKey: string,
+  occupiedKeys: Set<string>
+) => {
+  const parts = baseKey.split('.');
+  const schema = parts.length > 1 ? parts[0] : undefined;
+  const baseName = parts.length > 1 ? parts.slice(1).join('.') : baseKey;
+
+  let attempt = 1;
+  let candidate = buildCandidateKey(schema, baseName, attempt);
+
+  while (occupiedKeys.has(candidate)) {
+    attempt += 1;
+    candidate = buildCandidateKey(schema, baseName, attempt);
+  }
+
+  return candidate;
+};
+
+type ParsedForeignKey = {
+  schema?: string;
+  table: string;
+  column: string;
+};
+
+const parseForeignKey = (fk?: string | null): ParsedForeignKey | null => {
+  if (!fk) return null;
+  const cleaned = fk.trim();
+  if (!cleaned) return null;
+  const segments = cleaned.split('.');
+  if (segments.length < 2) return null;
+
+  const column = segments.pop()!;
+  const table = segments.pop()!;
+  const schema = segments.length > 0 ? segments.join('.') : undefined;
+
+  return { schema, table, column };
+};
+
+const isInputLikeElement = (target: EventTarget | null): boolean => {
+  if (!target || !(target instanceof HTMLElement)) {
+    return false;
+  }
+
+  const tagName = target.tagName;
+  return (
+    tagName === 'INPUT' ||
+    tagName === 'TEXTAREA' ||
+    tagName === 'SELECT' ||
+    target.isContentEditable
+  );
+};
+
 function FlowCanvasInner() {
-  const { tables, updateTablePosition, getEdgeRelationship, setEdgeRelationship, layoutTrigger, fitViewTrigger, zoomInTrigger, zoomOutTrigger, focusTableId, focusTableTrigger } = useStore();
+  const {
+    tables,
+    updateTablePosition,
+    getEdgeRelationship,
+    setEdgeRelationship,
+    layoutTrigger,
+    fitViewTrigger,
+    zoomInTrigger,
+    zoomOutTrigger,
+    focusTableId,
+    focusTableTrigger,
+    visibleSchemas,
+  } = useStore();
   const [nodes, setNodes, onNodesChange] = useNodesState<any>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<any>([]);
-  const [selectedEdge, setSelectedEdge] = useState<{id: string; type: RelationshipType; position: {x: number; y: number}} | null>(null);
+  const [selectedEdge, setSelectedEdge] = useState<{
+    id: string;
+    type: RelationshipType;
+    position: { x: number; y: number };
+  } | null>(null);
   const [contextMenu, setContextMenu] = useState<{
     type: 'node' | 'edge';
     x: number;
@@ -48,16 +148,22 @@ function FlowCanvasInner() {
     edgeId?: string;
     isView?: boolean;
   } | null>(null);
+  const [highlightedEdges, setHighlightedEdges] = useState<Set<string>>(
+    new Set()
+  );
+  const copiedSelectionRef = useRef<CopiedSelection | null>(null);
+  const pasteOffsetRef = useRef(0);
 
   // Connection mode with localStorage persistence
-  // Note: setConnectionMode is reserved for future use (connection mode toggle UI)
-  const [connectionMode, _setConnectionMode] = useState<'strict' | 'flexible'>(() => {
-    if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('connection-mode');
-      return (saved as 'strict' | 'flexible') || 'strict';
+  const [connectionMode, _setConnectionMode] = useState<'strict' | 'flexible'>(
+    () => {
+      if (typeof window !== 'undefined') {
+        const saved = localStorage.getItem('connection-mode');
+        return (saved as 'strict' | 'flexible') || 'strict';
+      }
+      return 'strict';
     }
-    return 'strict';
-  });
+  );
 
   // Save connection mode to localStorage when it changes
   useEffect(() => {
@@ -66,135 +172,503 @@ function FlowCanvasInner() {
     }
   }, [connectionMode]);
 
-  const { fitView, zoomIn, zoomOut, getZoom } = useReactFlow();
+  const { fitView, zoomIn, zoomOut, getZoom, screenToFlowPosition } = useReactFlow();
 
-  // Convert tables to nodes and edges when tables change
+  // Use refs to avoid dependency on functions
+  const reactFlowRef = useRef({ fitView, zoomIn, zoomOut, getZoom });
   useEffect(() => {
-    const flowNodes = tablesToNodes(tables);
-    const flowEdges = tablesToEdges(tables).map((edge) => {
-      const relationshipType = getEdgeRelationship(edge.id);
+    reactFlowRef.current = { fitView, zoomIn, zoomOut, getZoom };
+  }, [fitView, zoomIn, zoomOut, getZoom]);
+  const nodesRef = useRef<any[]>([]);
+  useEffect(() => {
+    nodesRef.current = nodes;
+  }, [nodes]);
+  const flowWrapperRef = useRef<HTMLDivElement | null>(null);
+  const lastCursorPositionRef = useRef<{ x: number; y: number } | null>(null);
+  const pasteInProgressRef = useRef(false);
 
-      // Configure markers based on relationship type
-      const markerEnd = {
-        type: MarkerType.ArrowClosed,
-        width: 20,
-        height: 20,
-        color: '#6B7280',
-      };
+  const updateCursorPosition = useCallback(
+    (event: React.MouseEvent) => {
+      if (!screenToFlowPosition) return;
+      lastCursorPositionRef.current = screenToFlowPosition({
+        x: event.clientX,
+        y: event.clientY,
+      });
+    },
+    [screenToFlowPosition]
+  );
 
-      const markerStart = relationshipType === 'many-to-many' ? {
-        type: MarkerType.ArrowClosed,
-        width: 20,
-        height: 20,
-        color: '#6B7280',
-      } : undefined;
+  // Track pending layout trigger to auto-trigger after nodes are set
+  const pendingLayoutRef = useRef(false);
+  const currentLayoutTriggerRef = useRef(0);
+  const isApplyingLayoutRef = useRef(false);
+  const fitViewRetryTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
-      return {
-        ...edge,
-        type: 'custom',
-        markerEnd,
-        markerStart,
-        data: {
-          ...edge.data,
-          relationshipType,
+  // Convert tables to nodes and edges when tables change (ASYNC to prevent blocking)
+  useEffect(() => {
+    // Use setTimeout(0) to yield to browser rendering, preventing UI freeze
+    const timeoutId = setTimeout(() => {
+      console.log('[FlowCanvas] Converting tables to nodes/edges...', {
+        tableCount: Object.keys(tables).length,
+        visibleSchemasSize: visibleSchemas.size,
+        visibleSchemas: Array.from(visibleSchemas),
+        isApplyingLayout: isApplyingLayoutRef.current,
+      });
+
+      // Filter tables by visible schemas
+      // Check if any schemas exist in the database
+      const allSchemas = getAllSchemas(tables);
+      const hasSchemas = allSchemas.length > 0;
+
+      const filteredTables = Object.entries(tables).reduce(
+        (acc, [key, table]) => {
+          if (!hasSchemas) {
+            // No schemas exist - show all tables (default state)
+            acc[key] = table;
+          } else if (visibleSchemas.size === 0) {
+            // Schemas exist but user hid all of them - hide everything
+            // Don't add table to acc
+          } else {
+            // Only show tables that have a schema in visibleSchemas, or tables without schemas
+            if (!table.schema || visibleSchemas.has(table.schema)) {
+              acc[key] = table;
+            }
+          }
+          return acc;
         },
-      };
-    });
-    setNodes(flowNodes);
-    setEdges(flowEdges);
-  }, [tables, setNodes, setEdges, getEdgeRelationship]);
+        {} as typeof tables
+      );
+
+      const flowNodes = tablesToNodes(filteredTables);
+      // Ensure all nodes have unique IDs
+      const nodesWithUniqueIds = flowNodes.map((node, index) => ({
+        ...node,
+        id: node.id || `node-${index}`, // Fallback ID if missing
+      }));
+
+      const flowEdges: FlowEdge[] = tablesToEdges(filteredTables).map((edge, index) => {
+        const relationshipType = getEdgeRelationship(edge.id);
+
+        const markerEnd = {
+          type: MarkerType.ArrowClosed,
+          width: 20,
+          height: 20,
+          color: '#6B7280',
+        };
+
+        const markerStart =
+          relationshipType === 'many-to-many'
+            ? {
+                type: MarkerType.ArrowClosed,
+                width: 20,
+                height: 20,
+                color: '#6B7280',
+              }
+            : undefined;
+
+        // Ensure edge.data exists and has required properties
+        if (!edge.data) {
+          throw new Error(`Edge ${edge.id} is missing data property`);
+        }
+
+        return {
+          ...edge,
+          id: edge.id || `edge-${index}`, // Ensure edge has ID
+          type: 'custom',
+          markerEnd,
+          markerStart,
+          data: {
+            sourceColumn: edge.data.sourceColumn,
+            targetColumn: edge.data.targetColumn,
+            relationshipType,
+          },
+        } as FlowEdge;
+      });
+
+      console.log(
+        `[FlowCanvas] Setting ${nodesWithUniqueIds.length} nodes and ${flowEdges.length} edges`
+      );
+      setNodes(nodesWithUniqueIds);
+      setEdges(flowEdges);
+      console.log('[FlowCanvas] Nodes/edges set');
+
+      // Reset pending flag if tables are empty
+      if (nodesWithUniqueIds.length === 0) {
+        pendingLayoutRef.current = false;
+        return;
+      }
+
+      // If layout was triggered before nodes were ready, trigger it now
+      // Use double requestAnimationFrame to ensure React has fully processed state updates
+      if (
+        pendingLayoutRef.current &&
+        nodesWithUniqueIds.length > 0 &&
+        flowEdges.length > 0 &&
+        !isApplyingLayoutRef.current
+      ) {
+        isApplyingLayoutRef.current = true;
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => {
+            console.log('[FlowCanvas] Auto-triggering layout after nodes set');
+            const layoutedNodes = getLayoutedNodesWithSchemas(
+              nodesWithUniqueIds,
+              flowEdges,
+              { direction: 'TB' }
+            );
+            setNodes(layoutedNodes);
+
+            // Update positions in store
+            layoutedNodes.forEach((node) => {
+              updateTablePosition(node.id, node.position.x, node.position.y);
+            });
+
+            // Fit view after layout
+            setTimeout(() => {
+              reactFlowRef.current.fitView({ padding: 0.2, duration: 400 });
+              isApplyingLayoutRef.current = false;
+            }, 50);
+
+            pendingLayoutRef.current = false;
+            currentLayoutTriggerRef.current = 0;
+          });
+        });
+      }
+    }, 0);
+
+    return () => {
+      clearTimeout(timeoutId);
+    };
+  }, [
+    tables,
+    visibleSchemas,
+    setNodes,
+    setEdges,
+    getEdgeRelationship,
+    updateTablePosition,
+  ]);
 
   // Listen for layout trigger from store
   useEffect(() => {
-    if (layoutTrigger > 0 && nodes.length > 0 && edges.length > 0) {
-      const layoutedNodes = getLayoutedNodes(nodes, edges, { direction: 'TB' });
-      setNodes(layoutedNodes);
-
-      // Update positions in store
-      layoutedNodes.forEach((node) => {
-        updateTablePosition(node.id, node.position.x, node.position.y);
-      });
-
-      // Fit view after layout
-      setTimeout(() => {
-        fitView({ padding: 0.2, duration: 400 });
-      }, 50);
+    // Skip if we're currently applying layout to prevent infinite loops
+    if (isApplyingLayoutRef.current) {
+      return;
     }
-  }, [layoutTrigger]); // eslint-disable-line react-hooks/exhaustive-deps
+
+    // Only process if trigger actually changed (prevents duplicate runs)
+    if (
+      layoutTrigger > 0 &&
+      layoutTrigger !== currentLayoutTriggerRef.current
+    ) {
+      currentLayoutTriggerRef.current = layoutTrigger;
+
+      if (nodes.length > 0 && edges.length > 0) {
+        // Nodes are ready, layout immediately
+        console.log('[FlowCanvas] Layout triggered, nodes ready');
+        isApplyingLayoutRef.current = true;
+
+        // Use requestAnimationFrame to ensure we're not blocking
+        requestAnimationFrame(() => {
+          const layoutedNodes = getLayoutedNodesWithSchemas(nodes, edges, {
+            direction: 'TB',
+          });
+          setNodes(layoutedNodes);
+
+          // Update positions in store
+          layoutedNodes.forEach((node) => {
+            updateTablePosition(node.id, node.position.x, node.position.y);
+          });
+
+          // Fit view after layout - retry if ReactFlow isn't ready
+          let retryCount = 0;
+          const maxRetries = 20; // Maximum 1 second of retries (20 * 50ms)
+          const attemptFitView = () => {
+            if (reactFlowRef.current?.fitView) {
+              reactFlowRef.current.fitView({ padding: 0.2, duration: 400 });
+              isApplyingLayoutRef.current = false;
+            } else if (retryCount < maxRetries) {
+              retryCount++;
+              // Retry after a short delay if ReactFlow isn't ready yet
+              setTimeout(attemptFitView, 50);
+            } else {
+              // Max retries reached, stop trying
+              isApplyingLayoutRef.current = false;
+            }
+          };
+          setTimeout(attemptFitView, 50);
+        });
+      } else {
+        // Nodes not ready yet, mark as pending
+        console.log(
+          '[FlowCanvas] Layout triggered but nodes not ready, marking as pending'
+        );
+        pendingLayoutRef.current = true;
+      }
+    }
+  }, [
+    layoutTrigger,
+    nodes,
+    edges,
+    setNodes,
+    updateTablePosition,
+  ]);
 
   // Listen for fit view trigger from store
   useEffect(() => {
-    if (fitViewTrigger > 0) {
-      fitView({ padding: 0.2, duration: 400 });
+    // Clear any pending retry
+    if (fitViewRetryTimeoutRef.current) {
+      clearTimeout(fitViewRetryTimeoutRef.current);
+      fitViewRetryTimeoutRef.current = null;
     }
-  }, [fitViewTrigger, fitView]);
+
+    if (fitViewTrigger > 0) {
+      let retryCount = 0;
+      const maxRetries = 20; // Maximum 1 second of retries (20 * 50ms)
+      const attemptFitView = () => {
+        if (reactFlowRef.current?.fitView) {
+          reactFlowRef.current.fitView({ padding: 0.2, duration: 400 });
+          fitViewRetryTimeoutRef.current = null;
+        } else if (retryCount < maxRetries) {
+          retryCount++;
+          // Retry after a short delay if ReactFlow isn't ready yet
+          fitViewRetryTimeoutRef.current = setTimeout(attemptFitView, 50);
+        } else {
+          fitViewRetryTimeoutRef.current = null;
+        }
+      };
+      attemptFitView();
+    }
+
+    // Cleanup on unmount or when trigger changes
+    return () => {
+      if (fitViewRetryTimeoutRef.current) {
+        clearTimeout(fitViewRetryTimeoutRef.current);
+        fitViewRetryTimeoutRef.current = null;
+      }
+    };
+  }, [fitViewTrigger]);
 
   // Listen for zoom in trigger
   useEffect(() => {
-    if (zoomInTrigger > 0) {
-      zoomIn({ duration: 200 });
-      // Dispatch custom event for zoom level display
+    if (zoomInTrigger > 0 && reactFlowRef.current?.zoomIn) {
+      reactFlowRef.current.zoomIn({ duration: 200 });
       setTimeout(() => {
-        const zoom = getZoom();
-        window.dispatchEvent(new CustomEvent('reactflow:zoom', { detail: { zoom } }));
+        const zoom = reactFlowRef.current?.getZoom?.();
+        if (zoom !== undefined) {
+          window.dispatchEvent(
+            new CustomEvent('reactflow:zoom', { detail: { zoom } })
+          );
+        }
       }, 250);
     }
-  }, [zoomInTrigger, zoomIn, getZoom]);
+  }, [zoomInTrigger]);
 
   // Listen for zoom out trigger
   useEffect(() => {
-    if (zoomOutTrigger > 0) {
-      zoomOut({ duration: 200 });
-      // Dispatch custom event for zoom level display
+    if (zoomOutTrigger > 0 && reactFlowRef.current?.zoomOut) {
+      reactFlowRef.current.zoomOut({ duration: 200 });
       setTimeout(() => {
-        const zoom = getZoom();
-        window.dispatchEvent(new CustomEvent('reactflow:zoom', { detail: { zoom } }));
+        const zoom = reactFlowRef.current?.getZoom?.();
+        if (zoom !== undefined) {
+          window.dispatchEvent(
+            new CustomEvent('reactflow:zoom', { detail: { zoom } })
+          );
+        }
       }, 250);
     }
-  }, [zoomOutTrigger, zoomOut, getZoom]);
+  }, [zoomOutTrigger]);
 
   // Listen for focus table trigger (from search)
   useEffect(() => {
     if (focusTableTrigger > 0 && focusTableId) {
       const node = nodes.find((n) => n.id === focusTableId);
-      if (node) {
-        // Center and zoom to the selected node
-        fitView({
+      if (node && reactFlowRef.current?.fitView) {
+        reactFlowRef.current.fitView({
           nodes: [node],
           padding: 0.3,
           duration: 600,
           maxZoom: 1.2,
         });
 
-        // Clear focusTableId after animation completes to prevent re-triggering
-        // This ensures the focus only happens once per search action
         setTimeout(() => {
           useStore.setState({ focusTableId: null });
-        }, 650); // Slightly longer than animation duration
+        }, 650);
       }
     }
-  }, [focusTableTrigger, focusTableId, nodes, fitView]);
+  }, [focusTableTrigger, focusTableId, nodes]);
 
-  // Emit initial zoom level and listen for zoom changes
+  // Emit initial zoom level (only once on mount)
   useEffect(() => {
-    const zoom = getZoom();
-    window.dispatchEvent(new CustomEvent('reactflow:zoom', { detail: { zoom } }));
-  }, [getZoom]);
+    const zoom = reactFlowRef.current?.getZoom?.();
+    if (zoom !== undefined) {
+      window.dispatchEvent(
+        new CustomEvent('reactflow:zoom', { detail: { zoom } })
+      );
+    }
+  }, []); // Empty deps - only run once
 
   // Handle ReactFlow zoom changes to update display
   const onMove = useCallback(() => {
-    const zoom = getZoom();
-    window.dispatchEvent(new CustomEvent('reactflow:zoom', { detail: { zoom } }));
-  }, [getZoom]);
+    const zoom = reactFlowRef.current?.getZoom?.();
+    if (zoom !== undefined) {
+      window.dispatchEvent(
+        new CustomEvent('reactflow:zoom', { detail: { zoom } })
+      );
+    }
+  }, []); // No deps - use ref
 
-  // Keyboard shortcuts
+  const copySelectedTables = useCallback(() => {
+    const selectedNodes =
+      nodesRef.current?.filter((node) => node.selected) ?? [];
+
+    if (!selectedNodes.length) {
+      toast.error('Select at least one table to copy');
+      return false;
+    }
+
+    const storeTables = useStore.getState().tables;
+    const copiedTables: CopiedTableEntry[] = selectedNodes
+      .map((node) => {
+        const tableData = storeTables[node.id];
+        if (!tableData) return null;
+        return {
+          key: node.id,
+          table: cloneTable(tableData),
+        };
+      })
+      .filter(Boolean) as CopiedTableEntry[];
+
+    if (!copiedTables.length) {
+      toast.error('Unable to copy the selected tables');
+      return false;
+    }
+
+    const xs = copiedTables.map(({ table }) => table.position?.x ?? 0);
+    const ys = copiedTables.map(({ table }) => table.position?.y ?? 0);
+    const minX = Math.min(...xs);
+    const maxX = Math.max(...xs);
+    const minY = Math.min(...ys);
+    const maxY = Math.max(...ys);
+    const center = {
+      x: (minX + maxX) / 2,
+      y: (minY + maxY) / 2,
+    };
+
+    copiedSelectionRef.current = { tables: copiedTables, center };
+    pasteOffsetRef.current = 0;
+    toast.success(
+      `Copied ${copiedTables.length} table${
+        copiedTables.length === 1 ? '' : 's'
+      }`
+    );
+    return true;
+  }, []);
+
+  const pasteCopiedTables = useCallback(() => {
+    // Prevent duplicate pastes with debouncing
+    if (pasteInProgressRef.current) {
+      return false;
+    }
+    
+    const payload = copiedSelectionRef.current;
+
+    if (!payload || payload.tables.length === 0) {
+      toast.error('Copy tables first before pasting');
+      return false;
+    }
+
+    pasteInProgressRef.current = true;
+
+    const state = useStore.getState();
+    const existingKeys = new Set(Object.keys(state.tables));
+    const newTables: TableState = {};
+    const newKeyMap = new Map<string, string>();
+
+    const payloadCenter = payload.center ?? { x: 0, y: 0 };
+    const cursorPosition = lastCursorPositionRef.current;
+    let deltaX = 0;
+    let deltaY = 0;
+
+    if (cursorPosition) {
+      deltaX = cursorPosition.x - payloadCenter.x;
+      deltaY = cursorPosition.y - payloadCenter.y;
+      pasteOffsetRef.current = 0;
+    } else {
+      pasteOffsetRef.current += 1;
+      const offsetAmount = pasteOffsetRef.current * 40;
+      deltaX = offsetAmount;
+      deltaY = offsetAmount;
+    }
+
+    payload.tables.forEach(({ key, table }) => {
+      const nextKey = createUniqueTableKey(key, existingKeys);
+      existingKeys.add(nextKey);
+      newKeyMap.set(key, nextKey);
+
+      const duplicatedTable = cloneTable(table);
+      duplicatedTable.title = nextKey;
+      const baseX = duplicatedTable.position?.x ?? 0;
+      const baseY = duplicatedTable.position?.y ?? 0;
+      duplicatedTable.position = {
+        x: baseX + deltaX,
+        y: baseY + deltaY,
+      };
+
+      newTables[nextKey] = duplicatedTable;
+    });
+
+    Object.values(newTables).forEach((table) => {
+      if (!table.columns) return;
+
+      table.columns = table.columns.map((column) => {
+        if (!column.fk) {
+          return { ...column };
+        }
+
+        const parsed = parseForeignKey(column.fk);
+        if (!parsed) {
+          return { ...column };
+        }
+
+        const originalTargetKey = parsed.schema
+          ? `${parsed.schema}.${parsed.table}`
+          : parsed.table;
+
+        if (newKeyMap.has(originalTargetKey)) {
+          const mappedKey = newKeyMap.get(originalTargetKey)!;
+          return {
+            ...column,
+            fk: `${mappedKey}.${parsed.column}`,
+          };
+        }
+
+        return { ...column, fk: undefined };
+      });
+    });
+
+    state.addTables(newTables);
+    const newCount = Object.keys(newTables).length;
+    toast.success(
+      `Pasted ${newCount} table${newCount === 1 ? '' : 's'}`
+    );
+    
+    // Reset paste flag after a short delay to prevent rapid duplicate pastes
+    setTimeout(() => {
+      pasteInProgressRef.current = false;
+    }, 100);
+    
+    return true;
+  }, []);
+
+  // Keyboard shortcuts (memoized to prevent re-creation)
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
       const cmdOrCtrl = isMac ? event.metaKey : event.ctrlKey;
+      const isInputField = isInputLikeElement(event.target);
 
       // Ctrl/Cmd + A: Select all nodes
       if (cmdOrCtrl && event.key === 'a') {
+        if (isInputField) return;
         event.preventDefault();
         setNodes((nds) =>
           nds.map((node) => ({
@@ -204,39 +678,61 @@ function FlowCanvasInner() {
         );
       }
 
-      // Delete: Remove selected nodes
-      if (event.key === 'Delete' || event.key === 'Backspace') {
-        const hasSelection = nodes.some((node) => node.selected);
-        if (hasSelection) {
+      // Ctrl/Cmd + C: Copy selection
+      if (cmdOrCtrl && event.key.toLowerCase() === 'c') {
+        if (isInputField) return;
+        const copied = copySelectedTables();
+        if (copied) {
           event.preventDefault();
-          const selectedNodeIds = nodes
-            .filter((node) => node.selected)
-            .map((node) => node.id);
-
-          // Remove selected nodes
-          setNodes((nds) => nds.filter((node) => !node.selected));
-
-          // Remove edges connected to deleted nodes
-          setEdges((eds) =>
-            eds.filter(
-              (edge) =>
-                !selectedNodeIds.includes(edge.source) &&
-                !selectedNodeIds.includes(edge.target)
-            )
-          );
         }
       }
 
-      // Space: Fit view (only when not typing in input fields)
-      if (event.code === 'Space') {
-        const target = event.target as HTMLElement;
-        const isInputField = target.tagName === 'INPUT' ||
-                            target.tagName === 'TEXTAREA' ||
-                            target.isContentEditable;
+      // Ctrl/Cmd + V: Paste copied tables
+      if (cmdOrCtrl && event.key.toLowerCase() === 'v') {
+        if (isInputField) return;
+        if (pasteInProgressRef.current) {
+          event.preventDefault();
+          return;
+        }
+        event.preventDefault(); // Prevent React Flow's built-in paste
+        const pasted = pasteCopiedTables();
+        if (!pasted) {
+          // If paste failed, reset the flag immediately
+          pasteInProgressRef.current = false;
+        }
+      }
 
+      // Delete / Backspace: Remove selected nodes
+      if (event.key === 'Delete' || event.key === 'Backspace') {
+        if (isInputField) return;
+        setNodes((nds) => {
+          const hasSelection = nds.some((node) => node.selected);
+          if (hasSelection) {
+            event.preventDefault();
+            const selectedNodeIds = nds
+              .filter((node) => node.selected)
+              .map((node) => node.id);
+
+            // Remove edges connected to deleted nodes
+            setEdges((eds) =>
+              eds.filter(
+                (edge) =>
+                  !selectedNodeIds.includes(edge.source) &&
+                  !selectedNodeIds.includes(edge.target)
+              )
+            );
+
+            return nds.filter((node) => !node.selected);
+          }
+          return nds;
+        });
+      }
+
+      // Space: Fit view (ignore when typing)
+      if (event.code === 'Space') {
         if (!isInputField) {
           event.preventDefault();
-          fitView({ padding: 0.2, duration: 400 });
+          reactFlowRef.current.fitView({ padding: 0.2, duration: 400 });
         }
       }
 
@@ -253,11 +749,20 @@ function FlowCanvasInner() {
       }
     };
 
+    const handleKeyUp = (event: KeyboardEvent) => {
+      const key = event.key.toLowerCase();
+      if (key === 'v' || key === 'meta' || key === 'control') {
+        pasteInProgressRef.current = false;
+      }
+    };
+
     window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('keyup', handleKeyUp);
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keyup', handleKeyUp);
     };
-  }, [nodes, setNodes, setEdges, fitView]);
+  }, [setNodes, setEdges, copySelectedTables, pasteCopiedTables]);
 
   // Handle node drag end to sync position back to store
   const onNodeDragStop = useCallback(
@@ -268,13 +773,9 @@ function FlowCanvasInner() {
   );
 
   // Handle multiple nodes drag
-  const onNodesDelete = useCallback(
-    (deleted: any[]) => {
-      // Handle node deletion if needed
-      console.log('Nodes deleted:', deleted);
-    },
-    []
-  );
+  const onNodesDelete = useCallback((deleted: any[]) => {
+    console.log('Nodes deleted:', deleted);
+  }, []);
 
   const onConnect = useCallback(
     (params: Connection) => {
@@ -286,7 +787,6 @@ function FlowCanvasInner() {
   // Validate connections based on connection mode
   const isValidConnection = useCallback(
     (connection: Edge | Connection) => {
-      // Always prevent self-connections
       if (connection.source === connection.target) {
         toast.error('Cannot connect to self', {
           description: 'A table cannot have a relationship with itself',
@@ -297,43 +797,36 @@ function FlowCanvasInner() {
       }
 
       if (connectionMode === 'flexible') {
-        // In flexible mode, allow any valid source → target connection
         return true;
       }
 
-      // Strict mode: only FK columns can start connections
       const sourceNode = nodes.find((n) => n.id === connection.source);
       if (!sourceNode) return false;
 
       const sourceHandleId = connection.sourceHandle;
       if (!sourceHandleId) return false;
 
-      // Check if source handle is a FK column
-      const sourceColumn = sourceNode.data.columns?.find((_col: any, index: number) => {
-        const handleId = `${sourceNode.id}_${_col.title}_${index}`;
-        return handleId === sourceHandleId;
-      });
+      const sourceColumn = sourceNode.data.columns?.find(
+        (_col: any, index: number) => {
+          const handleId = `${sourceNode.id}_${_col.title}_${index}`;
+          return handleId === sourceHandleId;
+        }
+      );
 
       const isForeignKey = sourceColumn?.fk !== undefined;
 
-      // Show toast notification if connection is invalid
       if (!isForeignKey) {
         toast.error('Only foreign keys can create connections', {
-          description: 'In strict mode, only FK columns (green handles) can start connections',
+          description:
+            'In strict mode, only FK columns (green handles) can start connections',
           position: 'bottom-center',
           duration: 2500,
         });
       }
 
-      // Only allow connection if source column is a FK
       return isForeignKey;
     },
     [connectionMode, nodes]
-  );
-
-  // Highlight connected edges on node selection
-  const [highlightedEdges, setHighlightedEdges] = useState<Set<string>>(
-    new Set()
   );
 
   const onNodeClick = useCallback(
@@ -352,7 +845,6 @@ function FlowCanvasInner() {
     setContextMenu(null);
   }, []);
 
-  // Handle node context menu (right-click)
   const onNodeContextMenu = useCallback(
     (event: React.MouseEvent, node: any) => {
       event.preventDefault();
@@ -368,7 +860,6 @@ function FlowCanvasInner() {
     []
   );
 
-  // Handle edge context menu (right-click)
   const onEdgeContextMenu = useCallback(
     (event: React.MouseEvent, edge: Edge) => {
       event.preventDefault();
@@ -382,7 +873,6 @@ function FlowCanvasInner() {
     []
   );
 
-  // Handle edge click to show relationship selector
   const onEdgeClick = useCallback(
     (event: React.MouseEvent, edge: Edge) => {
       event.stopPropagation();
@@ -399,23 +889,24 @@ function FlowCanvasInner() {
     [getEdgeRelationship]
   );
 
-  // Handle relationship type change
   const handleRelationshipChange = useCallback(
     (type: RelationshipType) => {
       if (selectedEdge) {
         setEdgeRelationship(selectedEdge.id, type);
-        // Update the edge data and markers immediately
         setEdges((eds) =>
           eds.map((edge) =>
             edge.id === selectedEdge.id
               ? {
                   ...edge,
-                  markerStart: type === 'many-to-many' ? {
-                    type: MarkerType.ArrowClosed,
-                    width: 20,
-                    height: 20,
-                    color: '#6B7280',
-                  } : undefined,
+                  markerStart:
+                    type === 'many-to-many'
+                      ? {
+                          type: MarkerType.ArrowClosed,
+                          width: 20,
+                          height: 20,
+                          color: '#6B7280',
+                        }
+                      : undefined,
                   data: {
                     ...edge.data,
                     relationshipType: type,
@@ -429,7 +920,6 @@ function FlowCanvasInner() {
     [selectedEdge, setEdgeRelationship, setEdges]
   );
 
-  // Handle edge deletion
   const handleEdgeDelete = useCallback(() => {
     if (selectedEdge) {
       setEdges((eds) => eds.filter((edge) => edge.id !== selectedEdge.id));
@@ -437,7 +927,6 @@ function FlowCanvasInner() {
     }
   }, [selectedEdge, setEdges]);
 
-  // Context menu actions
   const handleNodeDelete = useCallback(
     (nodeId: string) => {
       setNodes((nds) => nds.filter((node) => node.id !== nodeId));
@@ -450,7 +939,7 @@ function FlowCanvasInner() {
 
   const handleCopyNodeId = useCallback((nodeId: string) => {
     navigator.clipboard.writeText(nodeId).catch((err) => {
-      console.error("Failed to copy node ID to clipboard:", err);
+      console.error('Failed to copy node ID to clipboard:', err);
     });
   }, []);
 
@@ -458,14 +947,14 @@ function FlowCanvasInner() {
     (nodeId: string) => {
       const node = nodes.find((n) => n.id === nodeId);
       if (node) {
-        fitView({
+        reactFlowRef.current.fitView({
           padding: 0.2,
           duration: 400,
           nodes: [node],
         });
       }
     },
-    [nodes, fitView]
+    [nodes]
   );
 
   const handleHideNode = useCallback(
@@ -494,7 +983,9 @@ function FlowCanvasInner() {
         setSelectedEdge({
           id: edge.id,
           type: relationshipType,
-          position: contextMenu ? { x: contextMenu.x, y: contextMenu.y } : { x: 0, y: 0 },
+          position: contextMenu
+            ? { x: contextMenu.x, y: contextMenu.y }
+            : { x: 0, y: 0 },
         });
       }
       setContextMenu(null);
@@ -502,7 +993,7 @@ function FlowCanvasInner() {
     [edges, getEdgeRelationship, contextMenu]
   );
 
-  // Apply highlighting to edges
+  // Apply highlighting to edges (memoized)
   const edgesWithHighlight = useMemo(() => {
     return edges.map((edge) => ({
       ...edge,
@@ -512,7 +1003,11 @@ function FlowCanvasInner() {
   }, [edges, highlightedEdges, selectedEdge]);
 
   return (
-    <div className="w-full h-screen">
+    <div
+      className="w-full h-screen"
+      ref={flowWrapperRef}
+      onMouseMove={updateCursorPosition}
+    >
       <ReactFlow
         nodes={nodes}
         edges={edgesWithHighlight}
