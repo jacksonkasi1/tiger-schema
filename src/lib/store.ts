@@ -10,10 +10,12 @@ interface AppState {
   setIsModalOpen: (open: boolean) => void;
 
   // Sidebar state
-  selectedTableId: string | null;
-  setSelectedTableId: (tableId: string | null) => void;
   sidebarOpen: boolean;
   setSidebarOpen: (open: boolean) => void;
+  expandedTables: Set<string>;
+  toggleTableExpanded: (tableId: string) => void;
+  expandTable: (tableId: string) => void;
+  collapseTable: (tableId: string) => void;
 
   // Table state
   tables: TableState;
@@ -241,8 +243,8 @@ export const useStore = create<AppState>((set, get) => {
   return {
   // Initial state
   isModalOpen: false,
-  selectedTableId: null,
   sidebarOpen: true,
+  expandedTables: new Set<string>(),
   tables: {},
   tableSelected: new Set<Element>(),
   tableHighlighted: '',
@@ -268,8 +270,33 @@ export const useStore = create<AppState>((set, get) => {
 
   // Actions
   setIsModalOpen: (open) => set({ isModalOpen: open }),
-  setSelectedTableId: (tableId) => set({ selectedTableId: tableId }),
   setSidebarOpen: (open) => set({ sidebarOpen: open }),
+
+  toggleTableExpanded: (tableId) => {
+    set((state) => {
+      const newExpanded = new Set(state.expandedTables);
+      if (newExpanded.has(tableId)) {
+        newExpanded.delete(tableId);
+      } else {
+        newExpanded.add(tableId);
+      }
+      return { expandedTables: newExpanded };
+    });
+  },
+
+  expandTable: (tableId) => {
+    set((state) => ({
+      expandedTables: new Set(state.expandedTables).add(tableId),
+    }));
+  },
+
+  collapseTable: (tableId) => {
+    set((state) => {
+      const newExpanded = new Set(state.expandedTables);
+      newExpanded.delete(tableId);
+      return { expandedTables: newExpanded };
+    });
+  },
 
   setTables: (definition: any, paths: any) => {
     const tableGroup: TableState = {};
@@ -418,9 +445,15 @@ export const useStore = create<AppState>((set, get) => {
       title: newName,
     };
 
-    set({ tables: updatedTables });
-    if (get().selectedTableId === tableId) {
-      set({ selectedTableId: newName });
+    // Update expandedTables if the old table was expanded
+    const wasExpanded = get().expandedTables.has(tableId);
+    if (wasExpanded) {
+      const newExpanded = new Set(get().expandedTables);
+      newExpanded.delete(tableId);
+      newExpanded.add(newName);
+      set({ tables: updatedTables, expandedTables: newExpanded });
+    } else {
+      set({ tables: updatedTables });
     }
     get().saveToLocalStorage();
   },
@@ -528,9 +561,12 @@ export const useStore = create<AppState>((set, get) => {
       const newTables = { ...state.tables };
       delete newTables[tableId];
 
+      const newExpanded = new Set(state.expandedTables);
+      newExpanded.delete(tableId);
+
       return {
         tables: newTables,
-        selectedTableId: state.selectedTableId === tableId ? null : state.selectedTableId,
+        expandedTables: newExpanded,
       };
     });
     get().saveToLocalStorage();

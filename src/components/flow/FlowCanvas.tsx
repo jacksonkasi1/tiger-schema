@@ -132,7 +132,7 @@ function FlowCanvasInner() {
     focusTableId,
     focusTableTrigger,
     visibleSchemas,
-    setSelectedTableId,
+    expandTable,
   } = useStore();
   const [nodes, setNodes, onNodesChange] = useNodesState<any>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<any>([]);
@@ -836,10 +836,10 @@ function FlowCanvasInner() {
         (edge) => edge.source === node.id || edge.target === node.id
       );
       setHighlightedEdges(new Set(connectedEdges.map((e) => e.id)));
-      // Set selected table for sidebar
-      setSelectedTableId(node.id);
+      // Expand table in sidebar when clicked on canvas
+      expandTable(node.id);
     },
-    [edges, setSelectedTableId]
+    [edges, expandTable]
   );
 
   const onPaneClick = useCallback(() => {
