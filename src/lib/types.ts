@@ -27,6 +27,8 @@ export interface Table {
   position?: Position;
   is_view?: boolean;
   schema?: string; // Schema name (e.g., 'public', 'auth', 'storage')
+  color?: string; // Header color for the table card
+  comment?: string; // Comment/note for the table
 }
 
 export interface TableState {

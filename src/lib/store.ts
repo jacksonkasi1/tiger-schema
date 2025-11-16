@@ -9,11 +9,24 @@ interface AppState {
   isModalOpen: boolean;
   setIsModalOpen: (open: boolean) => void;
 
+  // Sidebar state
+  selectedTableId: string | null;
+  setSelectedTableId: (tableId: string | null) => void;
+  sidebarOpen: boolean;
+  setSidebarOpen: (open: boolean) => void;
+
   // Table state
   tables: TableState;
   setTables: (definition: any, paths: any) => void;
   updateTablesFromAI: (tables: TableState) => void;
   updateTablePosition: (tableId: string, x: number, y: number) => void;
+  updateTableName: (tableId: string, newName: string) => void;
+  updateTableColor: (tableId: string, color: string) => void;
+  updateTableComment: (tableId: string, comment: string) => void;
+  addColumn: (tableId: string, column: Column) => void;
+  updateColumn: (tableId: string, columnIndex: number, updates: Partial<Column>) => void;
+  deleteColumn: (tableId: string, columnIndex: number) => void;
+  deleteTable: (tableId: string) => void;
   autoArrange: () => void;
 
   // Layout trigger for ReactFlow
@@ -228,6 +241,8 @@ export const useStore = create<AppState>((set, get) => {
   return {
   // Initial state
   isModalOpen: false,
+  selectedTableId: null,
+  sidebarOpen: true,
   tables: {},
   tableSelected: new Set<Element>(),
   tableHighlighted: '',
@@ -253,6 +268,8 @@ export const useStore = create<AppState>((set, get) => {
 
   // Actions
   setIsModalOpen: (open) => set({ isModalOpen: open }),
+  setSelectedTableId: (tableId) => set({ selectedTableId: tableId }),
+  setSidebarOpen: (open) => set({ sidebarOpen: open }),
 
   setTables: (definition: any, paths: any) => {
     const tableGroup: TableState = {};
@@ -384,6 +401,136 @@ export const useStore = create<AppState>((set, get) => {
             position: { x, y },
           },
         },
+      };
+    });
+    get().saveToLocalStorage();
+  },
+
+  updateTableName: (tableId, newName) => {
+    const currentTables = get().tables;
+    const table = currentTables[tableId];
+    if (!table) return;
+
+    const updatedTables = { ...currentTables };
+    delete updatedTables[tableId];
+    updatedTables[newName] = {
+      ...table,
+      title: newName,
+    };
+
+    set({ tables: updatedTables });
+    if (get().selectedTableId === tableId) {
+      set({ selectedTableId: newName });
+    }
+    get().saveToLocalStorage();
+  },
+
+  updateTableColor: (tableId, color) => {
+    set((state) => {
+      const existing = state.tables[tableId];
+      if (!existing) return state;
+
+      return {
+        tables: {
+          ...state.tables,
+          [tableId]: {
+            ...existing,
+            color,
+          },
+        },
+      };
+    });
+    get().saveToLocalStorage();
+  },
+
+  updateTableComment: (tableId, comment) => {
+    set((state) => {
+      const existing = state.tables[tableId];
+      if (!existing) return state;
+
+      return {
+        tables: {
+          ...state.tables,
+          [tableId]: {
+            ...existing,
+            comment,
+          },
+        },
+      };
+    });
+    get().saveToLocalStorage();
+  },
+
+  addColumn: (tableId, column) => {
+    set((state) => {
+      const existing = state.tables[tableId];
+      if (!existing) return state;
+
+      return {
+        tables: {
+          ...state.tables,
+          [tableId]: {
+            ...existing,
+            columns: [...(existing.columns || []), column],
+          },
+        },
+      };
+    });
+    get().saveToLocalStorage();
+  },
+
+  updateColumn: (tableId, columnIndex, updates) => {
+    set((state) => {
+      const existing = state.tables[tableId];
+      if (!existing || !existing.columns) return state;
+
+      const newColumns = [...existing.columns];
+      newColumns[columnIndex] = {
+        ...newColumns[columnIndex],
+        ...updates,
+      };
+
+      return {
+        tables: {
+          ...state.tables,
+          [tableId]: {
+            ...existing,
+            columns: newColumns,
+          },
+        },
+      };
+    });
+    get().saveToLocalStorage();
+  },
+
+  deleteColumn: (tableId, columnIndex) => {
+    set((state) => {
+      const existing = state.tables[tableId];
+      if (!existing || !existing.columns) return state;
+
+      const newColumns = existing.columns.filter((_, idx) => idx !== columnIndex);
+
+      return {
+        tables: {
+          ...state.tables,
+          [tableId]: {
+            ...existing,
+            columns: newColumns,
+          },
+        },
+      };
+    });
+    get().saveToLocalStorage();
+  },
+
+  deleteTable: (tableId) => {
+    set((state) => {
+      const newTables = { ...state.tables };
+      delete newTables[tableId];
+
+      return {
+        tables: newTables,
+        selectedTableId: state.selectedTableId === tableId ? null : state.selectedTableId,
       };
     });
     get().saveToLocalStorage();
