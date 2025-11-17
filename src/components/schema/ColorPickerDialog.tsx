@@ -2,11 +2,10 @@
 
 import { useStore } from '@/lib/store';
 import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover';
 import { Check } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -28,11 +27,12 @@ const TABLE_COLORS = [
   '#EF4444', // red
 ];
 
-interface ColorPickerColorPickerProps {
+interface ColorPickerPopoverProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   tableId: string;
   currentColor?: string;
+  trigger?: React.ReactNode;
 }
 
 export function ColorPickerDialog({
@@ -40,7 +40,8 @@ export function ColorPickerDialog({
   onOpenChange,
   tableId,
   currentColor,
-}: ColorPickerColorPickerProps) {
+  trigger,
+}: ColorPickerPopoverProps) {
   const { updateTableColor } = useStore();
 
   const handleColorSelect = (color: string) => {
@@ -49,29 +50,30 @@ export function ColorPickerDialog({
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[400px]">
-        <DialogHeader>
-          <DialogTitle>Choose Table Color</DialogTitle>
-        </DialogHeader>
-        <div className="grid grid-cols-5 gap-3 py-4">
-          {TABLE_COLORS.map((color) => (
-            <button
-              key={color}
-              className={cn(
-                'h-12 w-12 rounded-lg transition-all hover:scale-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring relative',
-                currentColor === color && 'ring-2 ring-offset-2 ring-offset-background'
-              )}
-              style={{ backgroundColor: color }}
-              onClick={() => handleColorSelect(color)}
-            >
-              {currentColor === color && (
-                <Check className="h-5 w-5 absolute inset-0 m-auto text-white drop-shadow-lg" />
-              )}
-            </button>
-          ))}
+    <Popover open={open} onOpenChange={onOpenChange}>
+      {trigger && <PopoverTrigger asChild>{trigger}</PopoverTrigger>}
+      <PopoverContent className="w-auto p-4" align="start">
+        <div className="space-y-2">
+          <p className="text-sm font-medium">Choose Table Color</p>
+          <div className="grid grid-cols-5 gap-2">
+            {TABLE_COLORS.map((color) => (
+              <button
+                key={color}
+                className={cn(
+                  'h-10 w-10 rounded-md transition-all hover:scale-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring relative',
+                  currentColor === color && 'ring-2 ring-offset-2 ring-offset-background'
+                )}
+                style={{ backgroundColor: color }}
+                onClick={() => handleColorSelect(color)}
+              >
+                {currentColor === color && (
+                  <Check className="h-4 w-4 absolute inset-0 m-auto text-white drop-shadow-lg" />
+                )}
+              </button>
+            ))}
+          </div>
         </div>
-      </DialogContent>
-    </Dialog>
+      </PopoverContent>
+    </Popover>
   );
 }
