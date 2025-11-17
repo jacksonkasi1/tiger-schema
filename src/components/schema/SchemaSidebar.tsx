@@ -1,15 +1,13 @@
 'use client';
 
-import { useState } from 'react';
 import { PanelLeftClose, PanelLeft } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { SchemaSidebarGui } from './SchemaSidebarGui';
 import { SchemaSidebarSql } from './SchemaSidebarSql';
-
-type SidebarMode = 'gui' | 'sql';
+import { useState } from 'react';
 
 export function SchemaSidebar() {
-  const [mode, setMode] = useState<SidebarMode>('gui');
   const [isCollapsed, setIsCollapsed] = useState(false);
 
   if (isCollapsed) {
@@ -44,36 +42,27 @@ export function SchemaSidebar() {
         </Button>
       </div>
 
-      {/* Mode Toggle */}
-      <div className="px-3 py-2 border-b border-border/50">
-        <div className="flex items-center gap-0.5 p-0.5 bg-muted/40 rounded">
-          <button
-            onClick={() => setMode('gui')}
-            className={`flex-1 px-3 py-1 text-xs font-medium rounded-sm transition-colors ${
-              mode === 'gui'
-                ? 'bg-background text-foreground shadow-sm'
-                : 'text-muted-foreground hover:text-foreground'
-            }`}
-          >
-            GUI
-          </button>
-          <button
-            onClick={() => setMode('sql')}
-            className={`flex-1 px-3 py-1 text-xs font-medium rounded-sm transition-colors ${
-              mode === 'sql'
-                ? 'bg-background text-foreground shadow-sm'
-                : 'text-muted-foreground hover:text-foreground'
-            }`}
-          >
-            SQL
-          </button>
+      {/* Tabs */}
+      <Tabs defaultValue="gui" className="flex-1 flex flex-col overflow-hidden">
+        <div className="px-3 py-2 border-b border-border/50">
+          <TabsList className="grid w-full grid-cols-2 h-8">
+            <TabsTrigger value="gui" className="text-xs">
+              GUI
+            </TabsTrigger>
+            <TabsTrigger value="sql" className="text-xs">
+              SQL
+            </TabsTrigger>
+          </TabsList>
         </div>
-      </div>
 
-      {/* Content */}
-      <div className="flex-1 overflow-hidden">
-        {mode === 'gui' ? <SchemaSidebarGui /> : <SchemaSidebarSql />}
-      </div>
+        <TabsContent value="gui" className="flex-1 overflow-hidden mt-0">
+          <SchemaSidebarGui />
+        </TabsContent>
+
+        <TabsContent value="sql" className="flex-1 overflow-hidden mt-0">
+          <SchemaSidebarSql />
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }

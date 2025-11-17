@@ -1,10 +1,12 @@
 'use client';
 
 import { useStore } from '@/lib/store';
-import { TableCard } from './TableCard';
 import { Input } from '@/components/ui/input';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { Kbd } from '@/components/ui/kbd';
 import { Search } from 'lucide-react';
 import { useState, useMemo } from 'react';
+import { TableCollapsible } from './TableCollapsible';
 
 export function SchemaSidebarGui() {
   const { tables } = useStore();
@@ -23,30 +25,35 @@ export function SchemaSidebarGui() {
   return (
     <div className="flex flex-col h-full">
       {/* Search */}
-      <div className="px-2 py-2 border-b border-border/50">
+      <div className="px-3 py-2 border-b border-border/50">
         <div className="relative">
-          <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3 w-3 text-muted-foreground" />
+          <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
           <Input
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Search tables..."
-            className="h-7 pl-7 text-xs bg-muted/30 border-border/50"
+            className="h-8 pl-8 pr-12 text-sm"
           />
+          <div className="absolute right-2 top-1/2 -translate-y-1/2">
+            <Kbd>⌘K</Kbd>
+          </div>
         </div>
       </div>
 
       {/* Tables List */}
-      <div className="flex-1 overflow-y-auto">
-        {filteredTableIds.length > 0 ? (
-          filteredTableIds.map((tableId) => (
-            <TableCard key={tableId} tableId={tableId} />
-          ))
-        ) : (
-          <div className="text-center py-8 text-xs text-muted-foreground">
-            {searchQuery ? 'No tables found' : 'No tables in schema'}
-          </div>
-        )}
-      </div>
+      <ScrollArea className="flex-1">
+        <div className="py-1">
+          {filteredTableIds.length > 0 ? (
+            filteredTableIds.map((tableId) => (
+              <TableCollapsible key={tableId} tableId={tableId} />
+            ))
+          ) : (
+            <div className="text-center py-8 text-sm text-muted-foreground">
+              {searchQuery ? 'No tables found' : 'No tables in schema'}
+            </div>
+          )}
+        </div>
+      </ScrollArea>
     </div>
   );
 }
