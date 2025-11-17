@@ -10,7 +10,7 @@ import {
 import { Check } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
-const DRAWSQL_COLORS = [
+const TABLE_COLORS = [
   '#EC4899', // pink
   '#A855F7', // purple
   '#8B5CF6', // violet
@@ -35,7 +35,7 @@ interface ColorPickerColorPickerProps {
   currentColor?: string;
 }
 
-export function ColorPickerColorPicker({
+export function ColorPickerDialog({
   open,
   onOpenChange,
   tableId,
@@ -55,7 +55,7 @@ export function ColorPickerColorPicker({
           <DialogTitle>Choose Table Color</DialogTitle>
         </DialogHeader>
         <div className="grid grid-cols-5 gap-3 py-4">
-          {DRAWSQL_COLORS.map((color) => (
+          {TABLE_COLORS.map((color) => (
             <button
               key={color}
               className={cn(

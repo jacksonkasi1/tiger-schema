@@ -32,8 +32,6 @@ export function TableCard({ tableId }: TableCardProps) {
     tables,
     expandedTables,
     toggleTableExpanded,
-    updateColumn,
-    deleteColumn,
     addColumn,
     deleteTable,
     triggerFocusTable,
@@ -148,9 +146,9 @@ export function TableCard({ tableId }: TableCardProps) {
             table.columns.map((column, index) => (
               <ColumnRow
                 key={`${column.title}-${index}`}
+                tableId={tableId}
                 column={column}
-                onUpdate={(updates) => updateColumn(tableId, index, updates)}
-                onDelete={() => deleteColumn(tableId, index)}
+                columnIndex={index}
               />
             ))
           ) : (

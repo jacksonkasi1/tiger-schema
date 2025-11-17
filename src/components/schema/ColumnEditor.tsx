@@ -19,7 +19,6 @@ import {
   verticalListSortingStrategy,
 } from '@dnd-kit/sortable';
 import { ColumnRow } from './ColumnRow';
-import { ColumnRow } from './ColumnRow';
 import { useState } from 'react';
 
 interface ColumnEditorProps {
