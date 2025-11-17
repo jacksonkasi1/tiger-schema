@@ -163,70 +163,73 @@ export function TableCollapsible({ tableId }: TableCollapsibleProps) {
     <>
       <Collapsible open={isExpanded} onOpenChange={() => toggleTableExpanded(tableId)}>
         <div className="group border-b border-border/30 hover:bg-muted/30 transition-colors">
-          <CollapsibleTrigger className="w-full">
-            <div className="flex items-center gap-2 px-3 py-1.5">
-              {/* Expand Icon */}
-              {isExpanded ? (
-                <ChevronDown className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-              ) : (
-                <ChevronRight className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-              )}
+          <div className="flex items-center gap-2 px-3 py-1.5">
+            {/* Expand Icon - Trigger */}
+            <CollapsibleTrigger asChild>
+              <button className="shrink-0 hover:bg-accent rounded p-0.5 transition-colors">
+                {isExpanded ? (
+                  <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
+                ) : (
+                  <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />
+                )}
+              </button>
+            </CollapsibleTrigger>
 
-              {/* Color Indicator */}
-              <div
-                className="w-2.5 h-2.5 rounded-sm shrink-0"
-                style={{ backgroundColor: table.color || 'hsl(var(--primary))' }}
-              />
+            {/* Color Indicator */}
+            <div
+              className="w-2.5 h-2.5 rounded-sm shrink-0 cursor-pointer"
+              style={{ backgroundColor: table.color || 'hsl(var(--primary))' }}
+              onClick={() => toggleTableExpanded(tableId)}
+            />
 
-              {/* Table Name */}
-              <span className="flex-1 text-sm font-medium text-foreground truncate text-left">
-                {table.title}
-              </span>
+            {/* Table Name */}
+            <span 
+              className="flex-1 text-sm font-medium text-foreground truncate cursor-pointer"
+              onClick={() => toggleTableExpanded(tableId)}
+            >
+              {table.title}
+            </span>
 
-              {/* Column Count Badge */}
-              <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-5">
-                {table.columns?.length || 0}
-              </Badge>
+            {/* Column Count Badge */}
+            <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-5 shrink-0">
+              {table.columns?.length || 0}
+            </Badge>
 
-              {/* Actions */}
-              <div
-                className="opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-0.5"
-                onClick={(e) => e.stopPropagation()}
+            {/* Actions */}
+            <div className="opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-0.5 shrink-0">
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-6 w-6"
+                onClick={handleFocusTable}
+                title="Focus on canvas"
               >
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-6 w-6"
-                  onClick={handleFocusTable}
-                  title="Focus on canvas"
-                >
-                  <Focus className="h-3.5 w-3.5" />
-                </Button>
+                <Focus className="h-3.5 w-3.5" />
+              </Button>
 
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button variant="ghost" size="icon" className="h-6 w-6">
-                      <MoreVertical className="h-3.5 w-3.5" />
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end">
-                    <DropdownMenuItem onClick={handleFocusTable}>
-                      <Focus className="mr-2 h-3.5 w-3.5" />
-                      Focus in canvas
-                    </DropdownMenuItem>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem
-                      onClick={() => setShowDeleteDialog(true)}
-                      className="text-destructive"
-                    >
-                      <Trash2 className="mr-2 h-3.5 w-3.5" />
-                      Delete table
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              </div>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="ghost" size="icon" className="h-6 w-6">
+                    <MoreVertical className="h-3.5 w-3.5" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem onClick={handleFocusTable}>
+                    <Focus className="mr-2 h-3.5 w-3.5" />
+                    Focus in canvas
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    onClick={() => setShowDeleteDialog(true)}
+                    className="text-destructive"
+                  >
+                    <Trash2 className="mr-2 h-3.5 w-3.5" />
+                    Delete table
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
             </div>
-          </CollapsibleTrigger>
+          </div>
 
           <CollapsibleContent>
             <div className="border-t border-border/20 bg-muted/10">
