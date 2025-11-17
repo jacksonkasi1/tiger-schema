@@ -1,7 +1,7 @@
 'use client';
 
 import { useStore } from '@/lib/store';
-import { Column, TableIndex } from '@/lib/types';
+import { Column } from '@/lib/types';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
@@ -39,7 +39,6 @@ import {
   Layers,
 } from 'lucide-react';
 import { useState } from 'react';
-import { ColorPicker } from './ColorPicker';
 
 const DATA_TYPES = [
   'serial',
@@ -90,7 +89,6 @@ export function TableEditor({ tableId, onClose }: TableEditorProps) {
     addColumn,
     updateColumn,
     deleteColumn,
-    updateColumn: updateColumnStore,
   } = useStore();
 
   const table = tables[tableId];
@@ -98,7 +96,7 @@ export function TableEditor({ tableId, onClose }: TableEditorProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [editingTableName, setEditingTableName] = useState(false);
   const [tableNameValue, setTableNameValue] = useState(table?.title || '');
-  const [newIndexColumns, setNewIndexColumns] = useState<string[]>([]);
+  const [newIndexColumns] = useState<string[]>([]);
 
   if (!table) return null;
 

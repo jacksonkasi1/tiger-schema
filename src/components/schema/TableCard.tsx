@@ -76,7 +76,7 @@ export function TableCard({ tableId }: TableCardProps) {
         {/* Color Indicator */}
         <div
           className="w-2.5 h-2.5 rounded-sm flex-shrink-0"
-          style={{ backgroundColor: table.color || '#3B82F6' }}
+          style={{ backgroundColor: table.color || 'hsl(var(--primary))' }}
         />
 
         {/* Table Name */}

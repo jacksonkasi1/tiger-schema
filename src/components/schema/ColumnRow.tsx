@@ -75,7 +75,7 @@ export function ColumnRow({ column, onUpdate, onDelete }: ColumnRowProps) {
           onClick={() => onUpdate({ pk: !column.pk })}
           className={`px-1 py-0.5 text-[9px] font-medium rounded transition-colors ${
             column.pk
-              ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30'
+              ? 'bg-primary/20 text-primary border border-primary/30'
               : 'bg-muted text-muted-foreground border border-border/50 hover:border-border'
           }`}
         >
