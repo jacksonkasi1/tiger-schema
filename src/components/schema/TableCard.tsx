@@ -60,63 +60,63 @@ export function TableCard({ tableId }: TableCardProps) {
   };
 
   return (
-    <div className="border border-slate-700/50 rounded-lg overflow-hidden bg-slate-900/30">
+    <div className="border-b border-border/30">
       {/* Header */}
       <div
-        className="flex items-center gap-2 px-3 py-2 cursor-pointer hover:bg-slate-800/40 transition-colors group"
+        className="flex items-center gap-2 px-2 py-1.5 cursor-pointer hover:bg-muted/30 transition-colors group"
         onClick={() => toggleTableExpanded(tableId)}
       >
         {/* Expand Icon */}
         {isExpanded ? (
-          <ChevronDown className="h-3.5 w-3.5 text-slate-400" />
+          <ChevronDown className="h-3 w-3 text-muted-foreground flex-shrink-0" />
         ) : (
-          <ChevronRight className="h-3.5 w-3.5 text-slate-400" />
+          <ChevronRight className="h-3 w-3 text-muted-foreground flex-shrink-0" />
         )}
 
         {/* Color Indicator */}
         <div
-          className="w-3 h-3 rounded-sm flex-shrink-0"
+          className="w-2.5 h-2.5 rounded-sm flex-shrink-0"
           style={{ backgroundColor: table.color || '#3B82F6' }}
         />
 
         {/* Table Name */}
-        <span className="flex-1 text-sm font-medium text-slate-200">
+        <span className="flex-1 text-xs font-medium text-foreground truncate">
           {table.title}
         </span>
 
         {/* Column Count Badge */}
-        <span className="text-xs text-slate-500 px-1.5 py-0.5 bg-slate-800 rounded">
+        <span className="text-[10px] text-muted-foreground px-1.5 py-0.5 bg-muted/50 rounded">
           {table.columns?.length || 0}
         </span>
 
         {/* Actions - visible on hover */}
-        <div className="opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+        <div className="opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-0.5" onClick={(e) => e.stopPropagation()}>
           <Button
             variant="ghost"
             size="sm"
-            className="h-6 w-6 p-0"
+            className="h-5 w-5 p-0"
             onClick={handleFocusTable}
             title="Focus on canvas"
           >
-            <Focus className="h-3.5 w-3.5" />
+            <Focus className="h-3 w-3" />
           </Button>
 
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="sm" className="h-6 w-6 p-0">
-                <MoreVertical className="h-3.5 w-3.5" />
+              <Button variant="ghost" size="sm" className="h-5 w-5 p-0">
+                <MoreVertical className="h-3 w-3" />
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
               <DropdownMenuItem onClick={handleFocusTable}>
-                <Focus className="mr-2 h-3.5 w-3.5" />
+                <Focus className="mr-2 h-3 w-3" />
                 Focus in canvas
               </DropdownMenuItem>
               <DropdownMenuItem
                 onClick={() => setShowDeleteDialog(true)}
-                className="text-red-400"
+                className="text-destructive"
               >
-                <Trash2 className="mr-2 h-3.5 w-3.5" />
+                <Trash2 className="mr-2 h-3 w-3" />
                 Delete table
               </DropdownMenuItem>
             </DropdownMenuContent>
@@ -126,40 +126,38 @@ export function TableCard({ tableId }: TableCardProps) {
 
       {/* Expanded Content */}
       {isExpanded && (
-        <div className="border-t border-slate-700/50">
+        <div className="border-t border-border/20">
           {/* Columns Header */}
-          <div className="flex items-center justify-between px-3 py-2 bg-slate-800/20">
-            <span className="text-xs font-medium text-slate-400">
-              Columns ({table.columns?.length || 0})
+          <div className="flex items-center justify-between px-2 py-1 bg-muted/20">
+            <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">
+              Columns
             </span>
             <Button
               variant="ghost"
               size="sm"
-              className="h-6 text-xs text-blue-400 hover:text-blue-300"
+              className="h-5 text-[10px] px-1.5"
               onClick={handleAddColumn}
             >
-              <Plus className="h-3 w-3 mr-1" />
+              <Plus className="h-2.5 w-2.5 mr-0.5" />
               Add
             </Button>
           </div>
 
           {/* Columns List */}
-          <div className="px-1">
-            {table.columns && table.columns.length > 0 ? (
-              table.columns.map((column, index) => (
-                <ColumnRow
-                  key={`${column.title}-${index}`}
-                  column={column}
-                  onUpdate={(updates) => updateColumn(tableId, index, updates)}
-                  onDelete={() => deleteColumn(tableId, index)}
-                />
-              ))
-            ) : (
-              <div className="text-center py-4 text-xs text-slate-500">
-                No columns. Click &quot;Add&quot; to create one.
-              </div>
-            )}
-          </div>
+          {table.columns && table.columns.length > 0 ? (
+            table.columns.map((column, index) => (
+              <ColumnRow
+                key={`${column.title}-${index}`}
+                column={column}
+                onUpdate={(updates) => updateColumn(tableId, index, updates)}
+                onDelete={() => deleteColumn(tableId, index)}
+              />
+            ))
+          ) : (
+            <div className="text-center py-3 text-[10px] text-muted-foreground">
+              No columns. Click &quot;Add&quot; to create one.
+            </div>
+          )}
         </div>
       )}
 
@@ -179,7 +177,7 @@ export function TableCard({ tableId }: TableCardProps) {
                 deleteTable(tableId);
                 setShowDeleteDialog(false);
               }}
-              className="bg-red-600 hover:bg-red-700"
+              className="bg-destructive hover:bg-destructive/90"
             >
               Delete
             </AlertDialogAction>

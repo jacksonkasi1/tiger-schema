@@ -111,16 +111,15 @@ export function SchemaSidebarSql() {
   return (
     <div className="flex flex-col h-full">
       {/* Header */}
-      <div className="px-3 py-2 border-b border-slate-700/50 space-y-2">
-        <div className="text-xs font-medium text-slate-400">SQL Schema Editor</div>
+      <div className="px-2 py-2 border-b border-border/50">
         <Select value={selectedTable} onValueChange={setSelectedTable}>
-          <SelectTrigger className="h-8 text-sm bg-slate-800/40 border-slate-700">
+          <SelectTrigger className="h-7 text-xs bg-muted/30 border-border/50">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="__all__">Whole schema</SelectItem>
+            <SelectItem value="__all__" className="text-xs">Whole schema</SelectItem>
             {tableIds.map((id) => (
-              <SelectItem key={id} value={id}>
+              <SelectItem key={id} value={id} className="text-xs">
                 {tables[id]?.title || id}
               </SelectItem>
             ))}
@@ -129,30 +128,30 @@ export function SchemaSidebarSql() {
       </div>
 
       {/* Editor */}
-      <div className="flex-1 p-3 overflow-hidden">
+      <div className="flex-1 p-2 overflow-hidden">
         <Textarea
           value={sql}
           onChange={(e) => setSql(e.target.value)}
-          className="w-full h-full font-mono text-xs bg-slate-900/50 border-slate-700 resize-none"
+          className="w-full h-full font-mono text-[10px] bg-muted/20 border-border/50 resize-none"
           placeholder="CREATE TABLE ..."
         />
       </div>
 
       {/* Error */}
       {error && (
-        <div className="mx-3 mb-2 p-2 bg-red-950/20 border border-red-900/50 rounded text-xs text-red-400 flex items-start gap-2">
-          <AlertCircle className="h-3.5 w-3.5 flex-shrink-0 mt-0.5" />
+        <div className="mx-2 mb-2 p-2 bg-destructive/10 border border-destructive/30 rounded text-[10px] text-destructive flex items-start gap-2">
+          <AlertCircle className="h-3 w-3 flex-shrink-0 mt-0.5" />
           <span>{error}</span>
         </div>
       )}
 
       {/* Actions */}
-      <div className="px-3 py-2 border-t border-slate-700/50 flex gap-2">
-        <Button onClick={handleApply} size="sm" className="flex-1 h-8 text-xs">
+      <div className="px-2 py-2 border-t border-border/50 flex gap-2">
+        <Button onClick={handleApply} size="sm" className="flex-1 h-7 text-xs">
           Apply SQL
         </Button>
-        <Button onClick={handleReset} variant="outline" size="sm" className="h-8 px-2">
-          <RotateCcw className="h-3.5 w-3.5" />
+        <Button onClick={handleReset} variant="outline" size="sm" className="h-7 px-2">
+          <RotateCcw className="h-3 w-3" />
         </Button>
       </div>
     </div>
