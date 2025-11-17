@@ -70,13 +70,16 @@ export function TableList({ onOpenCommand }: TableListProps) {
           <Input
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            onClick={onOpenCommand}
             placeholder="Search tables..."
             className="h-9 pl-9 pr-16 text-sm"
           />
-          <div className="absolute right-3 top-1/2 -translate-y-1/2">
+          <button
+            onClick={onOpenCommand}
+            className="absolute right-3 top-1/2 -translate-y-1/2 hover:bg-accent rounded px-1"
+            title="Open command palette (⌘K)"
+          >
             <Kbd>⌘K</Kbd>
-          </div>
+          </button>
         </div>
       </div>
 

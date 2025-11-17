@@ -18,6 +18,11 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover';
+import {
   AlertDialog,
   AlertDialogAction,
   AlertDialogCancel,
@@ -40,12 +45,19 @@ import {
   Pencil,
   Maximize2,
   Copy,
+  Check,
 } from 'lucide-react';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { ColumnEditor } from './ColumnEditor';
-import { ColorPickerDialog } from './ColorPickerDialog';
 import { cn } from '@/lib/utils';
+
+const TABLE_COLORS = [
+  '#EC4899', '#A855F7', '#8B5CF6', '#6366F1',
+  '#3B82F6', '#0EA5E9', '#06B6D4', '#14B8A6',
+  '#10B981', '#22C55E', '#84CC16', '#EAB308',
+  '#F59E0B', '#F97316', '#EF4444',
+];
 
 interface TableItemProps {
   tableId: string;
@@ -60,6 +72,7 @@ export function TableItem({ tableId }: TableItemProps) {
     deleteTable,
     triggerFocusTable,
     updateTableName,
+    updateTableColor,
   } = useStore();
 
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
@@ -141,16 +154,44 @@ export function TableItem({ tableId }: TableItemProps) {
             </CollapsibleTrigger>
 
             {/* Color Indicator */}
-            <button
-              onClick={() => setShowColorPicker(true)}
-              className="shrink-0 hover:scale-110 transition-transform"
-              title="Change color"
-            >
-              <div
-                className="w-3 h-3 rounded-sm border border-border/50"
-                style={{ backgroundColor: table.color || 'hsl(var(--primary))' }}
-              />
-            </button>
+            <Popover open={showColorPicker} onOpenChange={setShowColorPicker}>
+              <PopoverTrigger asChild>
+                <button
+                  className="shrink-0 hover:scale-110 transition-transform"
+                  title="Change color"
+                >
+                  <div
+                    className="w-3 h-3 rounded-sm border border-border/50"
+                    style={{ backgroundColor: table.color || 'hsl(var(--primary))' }}
+                  />
+                </button>
+              </PopoverTrigger>
+              <PopoverContent className="w-auto p-3" align="start">
+                <div className="space-y-2">
+                  <p className="text-xs font-medium">Table Color</p>
+                  <div className="grid grid-cols-5 gap-2">
+                    {TABLE_COLORS.map((color) => (
+                      <button
+                        key={color}
+                        className={cn(
+                          'h-8 w-8 rounded-md transition-all hover:scale-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring relative',
+                          table.color === color && 'ring-2 ring-offset-2 ring-offset-background'
+                        )}
+                        style={{ backgroundColor: color }}
+                        onClick={() => {
+                          updateTableColor(tableId, color);
+                          setShowColorPicker(false);
+                        }}
+                      >
+                        {table.color === color && (
+                          <Check className="h-4 w-4 absolute inset-0 m-auto text-white drop-shadow-lg" />
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </PopoverContent>
+            </Popover>
 
             {/* 2) Table Name - Left Aligned, Truncated */}
             {isRenaming ? (
@@ -307,14 +348,6 @@ export function TableItem({ tableId }: TableItemProps) {
           </CollapsibleContent>
         </Collapsible>
       </div>
-
-      {/* Color Picker Dialog */}
-      <ColorPickerDialog
-        open={showColorPicker}
-        onOpenChange={setShowColorPicker}
-        tableId={tableId}
-        currentColor={table.color}
-      />
 
       {/* Delete Confirmation */}
       <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
