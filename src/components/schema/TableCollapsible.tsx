@@ -162,8 +162,8 @@ export function TableCollapsible({ tableId }: TableCollapsibleProps) {
   return (
     <>
       <Collapsible open={isExpanded} onOpenChange={() => toggleTableExpanded(tableId)}>
-        <div className="group border-b border-border/30 hover:bg-muted/30 transition-colors">
-          <div className="flex items-center gap-2 px-3 py-1.5">
+        <div className="group border-b border-border/30 hover:bg-muted/50 transition-colors">
+          <div className="flex items-center gap-1.5 px-2.5 py-1.5">
             {/* Expand Icon - Trigger */}
             <CollapsibleTrigger asChild>
               <button className="shrink-0 hover:bg-accent rounded p-0.5 transition-colors">
@@ -177,7 +177,7 @@ export function TableCollapsible({ tableId }: TableCollapsibleProps) {
 
             {/* Color Indicator */}
             <div
-              className="w-2.5 h-2.5 rounded-sm shrink-0 cursor-pointer"
+              className="w-3 h-3 rounded-sm shrink-0 cursor-pointer"
               style={{ backgroundColor: table.color || 'hsl(var(--primary))' }}
               onClick={() => toggleTableExpanded(tableId)}
             />
@@ -191,16 +191,16 @@ export function TableCollapsible({ tableId }: TableCollapsibleProps) {
             </span>
 
             {/* Column Count Badge */}
-            <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-5 shrink-0">
+            <Badge variant="secondary" className="text-[11px] px-1.5 py-0 h-5 shrink-0 font-normal">
               {table.columns?.length || 0}
             </Badge>
 
             {/* Actions */}
-            <div className="opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-0.5 shrink-0">
+            <div className="flex items-center gap-0.5 shrink-0">
               <Button
                 variant="ghost"
                 size="icon"
-                className="h-6 w-6"
+                className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
                 onClick={handleFocusTable}
                 title="Focus on canvas"
               >
@@ -209,7 +209,7 @@ export function TableCollapsible({ tableId }: TableCollapsibleProps) {
 
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <Button variant="ghost" size="icon" className="h-6 w-6">
+                  <Button variant="ghost" size="icon" className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity">
                     <MoreVertical className="h-3.5 w-3.5" />
                   </Button>
                 </DropdownMenuTrigger>
@@ -232,9 +232,9 @@ export function TableCollapsible({ tableId }: TableCollapsibleProps) {
           </div>
 
           <CollapsibleContent>
-            <div className="border-t border-border/20 bg-muted/10">
+            <div className="bg-muted/5">
               {/* Columns List */}
-              <div className="py-1">
+              <div className="py-0.5">
                 {table.columns && table.columns.length > 0 ? (
                   table.columns.map((column, index) => (
                     <ColumnRow
@@ -256,7 +256,7 @@ export function TableCollapsible({ tableId }: TableCollapsibleProps) {
               </div>
 
               {/* Bottom Actions */}
-              <div className="px-3 pb-2 pt-1 flex items-center gap-2 border-t border-border/20">
+              <div className="px-2.5 pb-1.5 pt-1 flex items-center gap-1.5 border-t border-border/20">
                 <Popover>
                   <PopoverTrigger asChild>
                     <Button
@@ -266,7 +266,7 @@ export function TableCollapsible({ tableId }: TableCollapsibleProps) {
                       title="Change color"
                     >
                       <div
-                        className="h-3.5 w-3.5 rounded-sm border"
+                        className="h-3.5 w-3.5 rounded-sm border border-border/50"
                         style={{ backgroundColor: table.color || 'hsl(var(--primary))' }}
                       />
                     </Button>
@@ -292,10 +292,10 @@ export function TableCollapsible({ tableId }: TableCollapsibleProps) {
                 <Button
                   variant="outline"
                   size="sm"
-                  className="flex-1 h-7 text-xs"
+                  className="flex-1 h-7 text-xs font-medium"
                   onClick={handleAddColumn}
                 >
-                  <Plus className="h-3 w-3 mr-1" />
+                  <Plus className="h-3 w-3 mr-1.5" />
                   Add Column
                 </Button>
               </div>
@@ -353,17 +353,57 @@ function ColumnRow({
   const [typeOpen, setTypeOpen] = useState(false);
 
   return (
-    <div className="group flex items-center gap-2 px-3 py-1 hover:bg-muted/40 transition-colors border-l-2 border-transparent hover:border-primary/40">
+    <div className="group flex items-center gap-1.5 px-2.5 py-0.5 hover:bg-muted/50 transition-colors">
       {/* Drag Handle */}
-      <Button variant="ghost" size="icon" className="h-5 w-5 shrink-0 cursor-grab">
-        <GripVertical className="h-3.5 w-3.5 text-muted-foreground" />
-      </Button>
+      <button className="shrink-0 cursor-grab active:cursor-grabbing opacity-40 hover:opacity-100 transition-opacity">
+        <GripVertical className="h-4 w-4 text-muted-foreground" />
+      </button>
+
+      {/* Index Type Icon */}
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button variant="ghost" size="icon" className="h-5 w-5 shrink-0">
+            {indexType === 'primary_key' ? (
+              <Key className="h-3.5 w-3.5 text-amber-500" />
+            ) : indexType === 'unique_key' ? (
+              <Sparkles className="h-3.5 w-3.5 text-indigo-500" />
+            ) : indexType === 'index' ? (
+              <SearchIcon className="h-3.5 w-3.5 text-violet-500" />
+            ) : (
+              <Circle className="h-3.5 w-3.5 text-muted-foreground/30" />
+            )}
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="start" className="w-48">
+          <DropdownMenuRadioGroup
+            value={indexType}
+            onValueChange={(value) => onIndexTypeChange(columnIndex, value as IndexType)}
+          >
+            <DropdownMenuRadioItem value="primary_key" className="text-sm">
+              <Key className="mr-2 h-3.5 w-3.5 text-amber-500" />
+              Primary key
+            </DropdownMenuRadioItem>
+            <DropdownMenuRadioItem value="unique_key" className="text-sm">
+              <Sparkles className="mr-2 h-3.5 w-3.5 text-indigo-500" />
+              Unique key
+            </DropdownMenuRadioItem>
+            <DropdownMenuRadioItem value="index" className="text-sm">
+              <SearchIcon className="mr-2 h-3.5 w-3.5 text-violet-500" />
+              Index
+            </DropdownMenuRadioItem>
+            <DropdownMenuRadioItem value="none" className="text-sm">
+              <Circle className="mr-2 h-3.5 w-3.5 text-muted-foreground" />
+              None
+            </DropdownMenuRadioItem>
+          </DropdownMenuRadioGroup>
+        </DropdownMenuContent>
+      </DropdownMenu>
 
       {/* Column Name */}
       <Input
         value={column.title}
         onChange={(e) => onUpdate({ title: e.target.value })}
-        className="h-6 flex-1 text-sm border-transparent hover:border-input focus-visible:border-primary bg-transparent px-2"
+        className="h-6 flex-1 text-[13px] font-mono border-transparent hover:border-input focus-visible:border-primary bg-transparent px-1.5"
         placeholder="column_name"
       />
 
@@ -374,13 +414,13 @@ function ColumnRow({
             variant="outline"
             role="combobox"
             aria-expanded={typeOpen}
-            className="h-6 w-[110px] justify-between text-xs font-mono px-2"
+            className="h-6 w-[100px] justify-between text-[11px] font-mono px-1.5 bg-muted/30"
           >
-            {column.format || column.type || 'varchar'}
+            <span className="truncate">{column.format || column.type || 'varchar'}</span>
             <ChevronsUpDown className="ml-1 h-3 w-3 shrink-0 opacity-50" />
           </Button>
         </PopoverTrigger>
-        <PopoverContent className="w-[200px] p-0" align="start">
+        <PopoverContent className="w-[200px] p-0" align="end">
           <Command>
             <CommandInput placeholder="Search type..." className="h-8 text-xs" />
             <CommandEmpty>No type found.</CommandEmpty>
@@ -393,7 +433,7 @@ function ColumnRow({
                     onUpdate({ format: type });
                     setTypeOpen(false);
                   }}
-                  className="text-xs"
+                  className="text-xs font-mono"
                 >
                   <Check
                     className={cn(
@@ -409,69 +449,38 @@ function ColumnRow({
         </PopoverContent>
       </Popover>
 
-      {/* NULL Toggle */}
-      <Toggle
-        size="sm"
-        pressed={!column.required}
-        onPressedChange={(pressed) => onUpdate({ required: !pressed })}
-        className="h-6 w-6 text-[10px] font-bold p-0"
-        title={column.required ? 'NOT NULL' : 'NULL'}
+      {/* NULL/NOT NULL Chip */}
+      <button
+        onClick={() => onUpdate({ required: !column.required })}
+        className={cn(
+          'h-6 w-7 flex items-center justify-center text-[10px] font-bold rounded border transition-colors shrink-0',
+          column.required
+            ? 'bg-teal-500/15 text-teal-600 border-teal-500/30 dark:text-teal-400'
+            : 'bg-muted/30 text-muted-foreground/60 border-border/50 hover:bg-muted/50'
+        )}
+        title={column.required ? 'NOT NULL (click to allow NULL)' : 'Nullable (click to require)'}
       >
-        N
-      </Toggle>
+        {column.required ? 'NN' : 'N'}
+      </button>
 
-      {/* Index Type Selector */}
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <Button variant="ghost" size="icon" className="h-6 w-6 shrink-0">
-            {indexType === 'primary_key' ? (
-              <Key className="h-3.5 w-3.5 text-yellow-500" />
-            ) : indexType === 'unique_key' ? (
-              <Sparkles className="h-3.5 w-3.5 text-blue-500" />
-            ) : indexType === 'index' ? (
-              <SearchIcon className="h-3.5 w-3.5 text-purple-500" />
-            ) : (
-              <Circle className="h-3.5 w-3.5 text-muted-foreground" />
-            )}
-          </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end">
-          <DropdownMenuRadioGroup
-            value={indexType}
-            onValueChange={(value) => onIndexTypeChange(columnIndex, value as IndexType)}
-          >
-            <DropdownMenuRadioItem value="primary_key" className="text-sm">
-              <Key className="mr-2 h-3.5 w-3.5 text-yellow-500" />
-              Primary key
-            </DropdownMenuRadioItem>
-            <DropdownMenuRadioItem value="unique_key" className="text-sm">
-              <Sparkles className="mr-2 h-3.5 w-3.5 text-blue-500" />
-              Unique key
-            </DropdownMenuRadioItem>
-            <DropdownMenuRadioItem value="index" className="text-sm">
-              <SearchIcon className="mr-2 h-3.5 w-3.5 text-purple-500" />
-              Index
-            </DropdownMenuRadioItem>
-            <DropdownMenuRadioItem value="none" className="text-sm">
-              <Circle className="mr-2 h-3.5 w-3.5 text-muted-foreground" />
-              None
-            </DropdownMenuRadioItem>
-          </DropdownMenuRadioGroup>
-        </DropdownMenuContent>
-      </DropdownMenu>
-
-      {/* Delete Column */}
+      {/* More Options */}
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <Button
             variant="ghost"
             size="icon"
-            className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
+            className="h-5 w-5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
           >
             <MoreVertical className="h-3.5 w-3.5" />
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
+          <DropdownMenuItem
+            onClick={() => onUpdate({ required: !column.required })}
+            className="text-sm"
+          >
+            Set {column.required ? 'NULL' : 'NOT NULL'}
+          </DropdownMenuItem>
           <DropdownMenuItem onClick={onDelete} className="text-destructive text-sm">
             <Trash2 className="mr-2 h-3.5 w-3.5" />
             Delete

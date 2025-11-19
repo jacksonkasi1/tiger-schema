@@ -29,8 +29,8 @@ export function SchemaSidebar() {
   return (
     <div className="pointer-events-auto absolute left-0 top-0 z-40 h-full w-80 bg-background/95 backdrop-blur border-r border-border flex flex-col shadow-2xl">
       {/* Header */}
-      <div className="px-3 py-2.5 border-b border-border/50 flex items-center justify-between">
-        <h2 className="text-sm font-semibold text-foreground">Schema Editor</h2>
+      <div className="px-3 py-2 border-b border-border/50 flex items-center justify-between">
+        <h2 className="text-[13px] font-semibold text-foreground">Schema Editor</h2>
         <Button
           variant="ghost"
           size="icon"

@@ -140,7 +140,7 @@ export function ColumnRow({
       ref={setNodeRef}
       style={style}
       className={cn(
-        'group flex items-center gap-2 px-3 py-1.5 hover:bg-muted/50 transition-colors border-l-[3px] border-transparent hover:border-green-500/40',
+        'group flex items-center gap-1.5 px-2.5 py-0.5 hover:bg-muted/50 transition-colors',
         isDragging && 'opacity-0',
         isDragOverlay && 'shadow-lg'
       )}
@@ -149,25 +149,25 @@ export function ColumnRow({
       <button
         {...attributes}
         {...listeners}
-        className="cursor-grab active:cursor-grabbing shrink-0 opacity-0 group-hover:opacity-100 transition-opacity"
+        className="cursor-grab active:cursor-grabbing shrink-0 opacity-40 hover:opacity-100 transition-opacity"
       >
-        <GripVertical className="h-3.5 w-3.5 text-muted-foreground" />
+        <GripVertical className="h-4 w-4 text-muted-foreground" />
       </button>
 
       {/* Index Type Icon */}
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button variant="ghost" size="icon" className="h-6 w-6 shrink-0">
+          <Button variant="ghost" size="icon" className="h-5 w-5 shrink-0">
             {indexType === 'primary_key' ? (
-              <Key className="h-3.5 w-3.5 text-yellow-500" />
+              <Key className="h-3.5 w-3.5 text-amber-500" />
             ) : indexType === 'unique_key' ? (
-              <Sparkles className="h-3.5 w-3.5 text-blue-500" />
+              <Sparkles className="h-3.5 w-3.5 text-indigo-500" />
             ) : indexType === 'index' ? (
-              <SearchIcon className="h-3.5 w-3.5 text-purple-500" />
+              <SearchIcon className="h-3.5 w-3.5 text-violet-500" />
             ) : column.fk ? (
               <Link2 className="h-3.5 w-3.5 text-emerald-500" />
             ) : (
-              <Circle className="h-3.5 w-3.5 text-muted-foreground/40" />
+              <Circle className="h-3.5 w-3.5 text-muted-foreground/30" />
             )}
           </Button>
         </DropdownMenuTrigger>
@@ -177,15 +177,15 @@ export function ColumnRow({
             onValueChange={(value) => handleIndexTypeChange(value as IndexType)}
           >
             <DropdownMenuRadioItem value="primary_key" className="text-sm">
-              <Key className="mr-2 h-3.5 w-3.5 text-yellow-500" />
+              <Key className="mr-2 h-3.5 w-3.5 text-amber-500" />
               Primary key
             </DropdownMenuRadioItem>
             <DropdownMenuRadioItem value="unique_key" className="text-sm">
-              <Sparkles className="mr-2 h-3.5 w-3.5 text-blue-500" />
+              <Sparkles className="mr-2 h-3.5 w-3.5 text-indigo-500" />
               Unique key
             </DropdownMenuRadioItem>
             <DropdownMenuRadioItem value="index" className="text-sm">
-              <SearchIcon className="mr-2 h-3.5 w-3.5 text-purple-500" />
+              <SearchIcon className="mr-2 h-3.5 w-3.5 text-violet-500" />
               Index
             </DropdownMenuRadioItem>
             <DropdownMenuRadioItem value="none" className="text-sm">
@@ -200,7 +200,7 @@ export function ColumnRow({
       <Input
         value={column.title}
         onChange={(e) => updateColumn(tableId, columnIndex, { title: e.target.value })}
-        className="h-7 flex-1 text-sm border-transparent hover:border-input focus-visible:border-primary bg-transparent px-2 font-mono"
+        className="h-6 flex-1 text-[13px] font-mono border-transparent hover:border-input focus-visible:border-primary bg-transparent px-1.5"
         placeholder="column_name"
       />
 
@@ -211,7 +211,7 @@ export function ColumnRow({
             variant="outline"
             role="combobox"
             aria-expanded={typeOpen}
-            className="h-7 w-[120px] justify-between text-xs font-mono px-2 bg-muted/30"
+            className="h-6 w-[100px] justify-between text-[11px] font-mono px-1.5 bg-muted/30"
           >
             <span className="truncate">{column.format || column.type || 'varchar'}</span>
             <ChevronsUpDown className="ml-1 h-3 w-3 shrink-0 opacity-50" />
@@ -257,10 +257,10 @@ export function ColumnRow({
                 })
               }
               className={cn(
-                'w-8 h-7 flex items-center justify-center text-[11px] font-bold rounded border transition-colors shrink-0',
+                'h-6 w-7 flex items-center justify-center text-[10px] font-bold rounded border transition-colors shrink-0',
                 column.required
-                  ? 'bg-emerald-500/10 text-emerald-600 border-emerald-500/30 dark:text-emerald-400'
-                  : 'bg-muted/50 text-muted-foreground border-border hover:bg-muted'
+                  ? 'bg-teal-500/15 text-teal-600 border-teal-500/30 dark:text-teal-400'
+                  : 'bg-muted/30 text-muted-foreground/60 border-border/50 hover:bg-muted/50'
               )}
             >
               {column.required ? 'NN' : 'N'}
@@ -278,7 +278,7 @@ export function ColumnRow({
           <Button
             variant="ghost"
             size="icon"
-            className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
+            className="h-5 w-5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
           >
             <MoreVertical className="h-3.5 w-3.5" />
           </Button>
@@ -290,6 +290,7 @@ export function ColumnRow({
                 required: !column.required,
               })
             }
+            className="text-sm"
           >
             Set {column.required ? 'NULL' : 'NOT NULL'}
           </DropdownMenuItem>

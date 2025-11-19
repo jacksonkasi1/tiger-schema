@@ -25,14 +25,14 @@ export function SchemaSidebarGui() {
   return (
     <div className="flex flex-col h-full">
       {/* Search */}
-      <div className="px-3 py-2 border-b border-border/50">
+      <div className="px-3 py-1.5 border-b border-border/50">
         <div className="relative">
           <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
           <Input
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Search tables..."
-            className="h-8 pl-8 pr-12 text-sm"
+            className="h-7 pl-8 pr-12 text-sm"
           />
           <div className="absolute right-2 top-1/2 -translate-y-1/2">
             <Kbd>⌘K</Kbd>
