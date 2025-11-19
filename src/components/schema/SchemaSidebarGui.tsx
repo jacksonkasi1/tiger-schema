@@ -1,7 +1,7 @@
 'use client';
 
 import { useStore } from '@/lib/store';
-import { Input } from '@/components/ui/input';
+import { InputGroup, InputGroupInput, InputGroupAddon } from '@/components/ui/input-group';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Kbd } from '@/components/ui/kbd';
 import { Search } from 'lucide-react';
@@ -26,18 +26,20 @@ export function SchemaSidebarGui() {
     <div className="flex flex-col h-full">
       {/* Search */}
       <div className="px-3 py-1.5 border-b border-border/50">
-        <div className="relative">
-          <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
-          <Input
+        <InputGroup className="h-8 rounded-lg border-border/50 bg-transparent p-0 focus-within:border-teal-500/50 focus-within:ring-1 focus-within:ring-teal-500/30">
+          <InputGroupAddon className="pl-2.5">
+            <Search className="h-3.5 w-3.5 text-muted-foreground" />
+          </InputGroupAddon>
+          <InputGroupInput
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Search tables..."
-            className="h-7 pl-8 pr-12 text-sm"
+            className="h-full text-sm px-1.5 py-0"
           />
-          <div className="absolute right-2 top-1/2 -translate-y-1/2">
+          <InputGroupAddon className="pr-2.5">
             <Kbd>⌘K</Kbd>
-          </div>
-        </div>
+          </InputGroupAddon>
+        </InputGroup>
       </div>
 
       {/* Tables List */}

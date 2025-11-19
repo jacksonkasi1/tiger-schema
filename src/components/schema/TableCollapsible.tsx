@@ -1,11 +1,11 @@
 'use client';
 
+import { useState } from 'react';
 import { useStore } from '@/lib/store';
 import { Column } from '@/lib/types';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
-import { Toggle } from '@/components/ui/toggle';
 import {
   Collapsible,
   CollapsibleContent,
@@ -48,7 +48,7 @@ import {
   GripVertical,
   Key,
   Sparkles,
-  Search as SearchIcon,
+  Search, // Changed from Search as SearchIcon
   Circle,
   MoreVertical,
   Plus,
@@ -57,7 +57,6 @@ import {
   Check,
   ChevronsUpDown,
 } from 'lucide-react';
-import { useState } from 'react';
 import { cn } from '@/lib/utils';
 
 interface TableCollapsibleProps {
@@ -368,7 +367,7 @@ function ColumnRow({
             ) : indexType === 'unique_key' ? (
               <Sparkles className="h-3.5 w-3.5 text-indigo-500" />
             ) : indexType === 'index' ? (
-              <SearchIcon className="h-3.5 w-3.5 text-violet-500" />
+              <Search className="h-3.5 w-3.5 text-violet-500" />
             ) : (
               <Circle className="h-3.5 w-3.5 text-muted-foreground/30" />
             )}
@@ -388,7 +387,7 @@ function ColumnRow({
               Unique key
             </DropdownMenuRadioItem>
             <DropdownMenuRadioItem value="index" className="text-sm">
-              <SearchIcon className="mr-2 h-3.5 w-3.5 text-violet-500" />
+              <Search className="mr-2 h-3.5 w-3.5 text-violet-500" />
               Index
             </DropdownMenuRadioItem>
             <DropdownMenuRadioItem value="none" className="text-sm">
@@ -420,11 +419,14 @@ function ColumnRow({
             <ChevronsUpDown className="ml-1 h-3 w-3 shrink-0 opacity-50" />
           </Button>
         </PopoverTrigger>
-        <PopoverContent className="w-[200px] p-0" align="end">
-          <Command>
-            <CommandInput placeholder="Search type..." className="h-8 text-xs" />
-            <CommandEmpty>No type found.</CommandEmpty>
-            <CommandGroup className="max-h-[200px] overflow-auto">
+        <PopoverContent className="w-[200px] p-0 border-border/50 shadow-xl" align="end">
+          <Command className="bg-popover">
+            <CommandInput 
+              placeholder="Search type..." 
+              className="h-8 text-xs font-mono border-x-0 border-t-0 border-b border-border/40 outline-none ring-0 focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0 focus-visible:border-teal-500/60 [&>svg]:h-3.5 [&>svg]:w-3.5" 
+            />
+            <CommandEmpty className="py-2 text-xs text-muted-foreground text-center">No type found.</CommandEmpty>
+            <CommandGroup className="max-h-[200px] overflow-auto p-1">
               {POSTGRES_TYPES.map((type) => (
                 <CommandItem
                   key={type}
@@ -433,11 +435,11 @@ function ColumnRow({
                     onUpdate({ format: type });
                     setTypeOpen(false);
                   }}
-                  className="text-xs font-mono"
+                  className="text-xs font-mono aria-selected:bg-teal-500/10 aria-selected:text-teal-600 rounded-sm py-1.5"
                 >
                   <Check
                     className={cn(
-                      'mr-2 h-3 w-3',
+                      'mr-2 h-3 w-3 text-teal-500',
                       (column.format || column.type) === type ? 'opacity-100' : 'opacity-0'
                     )}
                   />
