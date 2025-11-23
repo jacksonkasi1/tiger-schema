@@ -15,8 +15,8 @@ import {
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { useStore } from '@/lib/store';
-import { TableNode } from './TableNode';
 import { ViewNode } from './ViewNode';
+import { ModernTableNode } from './ModernTableNode';
 import { CustomEdge } from './CustomEdge';
 import { RelationshipSelector } from './RelationshipSelector';
 import {
@@ -32,7 +32,7 @@ import { toast } from 'sonner';
 import { Table, TableState } from '@/lib/types';
 
 const nodeTypes = {
-  table: TableNode,
+  table: ModernTableNode,
   view: ViewNode,
 };
 
@@ -132,6 +132,7 @@ function FlowCanvasInner() {
     focusTableId,
     focusTableTrigger,
     visibleSchemas,
+    expandTable,
   } = useStore();
   const [nodes, setNodes, onNodesChange] = useNodesState<any>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<any>([]);
@@ -835,8 +836,10 @@ function FlowCanvasInner() {
         (edge) => edge.source === node.id || edge.target === node.id
       );
       setHighlightedEdges(new Set(connectedEdges.map((e) => e.id)));
+      // Expand table in sidebar when clicked on canvas
+      expandTable(node.id);
     },
-    [edges]
+    [edges, expandTable]
   );
 
   const onPaneClick = useCallback(() => {

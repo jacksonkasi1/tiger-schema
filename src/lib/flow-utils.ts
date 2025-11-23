@@ -18,6 +18,7 @@ export function tablesToNodes(tables: TableState): FlowNode[] {
         columns: table.columns || [],
         is_view: table.is_view,
         schema: table.schema, // Include schema in node data (undefined if no schema)
+        color: table.color, // Include color for table header
       },
     };
   });

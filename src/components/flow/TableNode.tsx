@@ -10,7 +10,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 function TableNodeComponent({ data, selected, id }: NodeProps) {
   const tableData = data as unknown as TableNodeData;
   const tableName = id; // Node ID is the table name
-  const headerColor = getTableHeaderColor(tableName);
+  const headerColor = (tableData as any).color || getTableHeaderColor(tableName);
 
   return (
     <TooltipProvider delayDuration={150}>

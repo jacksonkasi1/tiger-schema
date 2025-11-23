@@ -1,7 +1,13 @@
 'use client';
 
 import { create } from 'zustand';
-import { TableState, Column, SchemaView, SupabaseApiKey } from './types';
+import {
+  TableState,
+  Column,
+  SchemaView,
+  SupabaseApiKey,
+  EnumTypeDefinition,
+} from './types';
 import { RelationshipType } from '@/types/flow';
 
 interface AppState {
@@ -9,11 +15,29 @@ interface AppState {
   isModalOpen: boolean;
   setIsModalOpen: (open: boolean) => void;
 
+  // Sidebar state
+  sidebarOpen: boolean;
+  setSidebarOpen: (open: boolean) => void;
+  expandedTables: Set<string>;
+  toggleTableExpanded: (tableId: string) => void;
+  expandTable: (tableId: string) => void;
+  collapseTable: (tableId: string) => void;
+
   // Table state
   tables: TableState;
   setTables: (definition: any, paths: any) => void;
-  updateTablesFromAI: (tables: TableState) => void;
+  updateTablesFromAI: (
+    tables: TableState,
+    meta?: { enumTypes?: Record<string, EnumTypeDefinition> }
+  ) => void;
   updateTablePosition: (tableId: string, x: number, y: number) => void;
+  updateTableName: (tableId: string, newName: string) => void;
+  updateTableColor: (tableId: string, color: string) => void;
+  updateTableComment: (tableId: string, comment: string) => void;
+  addColumn: (tableId: string, column: Column) => void;
+  updateColumn: (tableId: string, columnIndex: number, updates: Partial<Column>) => void;
+  deleteColumn: (tableId: string, columnIndex: number) => void;
+  deleteTable: (tableId: string) => void;
   autoArrange: () => void;
 
   // Layout trigger for ReactFlow
@@ -74,6 +98,10 @@ interface AppState {
 
   // Add new tables (used for copy/paste, AI updates, etc.)
   addTables: (tables: TableState) => void;
+
+  // Enum types
+  enumTypes: Record<string, EnumTypeDefinition>;
+  setEnumTypes: (types: Record<string, EnumTypeDefinition>) => void;
 }
 
 const checkView = (title: string, paths: any) => {
@@ -151,6 +179,7 @@ function performSave() {
       // Clear only table data, keep user preferences
       localStorage.removeItem('table-list');
       localStorage.removeItem('edge-relationships');
+      localStorage.removeItem('enum-types');
     }
 
     // Store data with size-optimized JSON (no extra whitespace)
@@ -158,10 +187,15 @@ function performSave() {
     const edgeRelationshipsJson = JSON.stringify(state.edgeRelationships);
     const visibleSchemasJson = JSON.stringify(Array.from(state.visibleSchemas));
     const collapsedSchemasJson = JSON.stringify(Array.from(state.collapsedSchemas));
+    const enumTypesJson = JSON.stringify(state.enumTypes);
 
     // Check individual item sizes before saving
-    const totalNewSize = tablesJson.length + edgeRelationshipsJson.length +
-                        visibleSchemasJson.length + collapsedSchemasJson.length;
+    const totalNewSize =
+      tablesJson.length +
+      edgeRelationshipsJson.length +
+      visibleSchemasJson.length +
+      collapsedSchemasJson.length +
+      enumTypesJson.length;
 
     if (totalNewSize > MAX_STORAGE_SIZE) {
       console.error(`Cannot save: Data size (${(totalNewSize / 1024 / 1024).toFixed(2)}MB) exceeds ${MAX_STORAGE_SIZE / 1024 / 1024}MB limit`);
@@ -178,6 +212,7 @@ function performSave() {
     localStorage.setItem('edge-relationships', edgeRelationshipsJson);
     localStorage.setItem('visible-schemas', visibleSchemasJson);
     localStorage.setItem('collapsed-schemas', collapsedSchemasJson);
+    localStorage.setItem('enum-types', enumTypesJson);
   } catch (error) {
     if (error instanceof Error && error.name === 'QuotaExceededError') {
       console.error('localStorage quota exceeded. Clearing cache...');
@@ -228,7 +263,10 @@ export const useStore = create<AppState>((set, get) => {
   return {
   // Initial state
   isModalOpen: false,
+  sidebarOpen: true,
+  expandedTables: new Set<string>(),
   tables: {},
+  enumTypes: {},
   tableSelected: new Set<Element>(),
   tableHighlighted: '',
   connectorHighlighted: [],
@@ -253,6 +291,33 @@ export const useStore = create<AppState>((set, get) => {
 
   // Actions
   setIsModalOpen: (open) => set({ isModalOpen: open }),
+  setSidebarOpen: (open) => set({ sidebarOpen: open }),
+
+  toggleTableExpanded: (tableId) => {
+    set((state) => {
+      const newExpanded = new Set(state.expandedTables);
+      if (newExpanded.has(tableId)) {
+        newExpanded.delete(tableId);
+      } else {
+        newExpanded.add(tableId);
+      }
+      return { expandedTables: newExpanded };
+    });
+  },
+
+  expandTable: (tableId) => {
+    set((state) => ({
+      expandedTables: new Set(state.expandedTables).add(tableId),
+    }));
+  },
+
+  collapseTable: (tableId) => {
+    set((state) => {
+      const newExpanded = new Set(state.expandedTables);
+      newExpanded.delete(tableId);
+      return { expandedTables: newExpanded };
+    });
+  },
 
   setTables: (definition: any, paths: any) => {
     const tableGroup: TableState = {};
@@ -329,7 +394,7 @@ export const useStore = create<AppState>((set, get) => {
     get().saveToLocalStorage();
   },
 
-  updateTablesFromAI: (updatedTables) => {
+  updateTablesFromAI: (updatedTables, meta) => {
     set((state) => {
       const nextTables: TableState = {};
       const discoveredSchemas = new Set<string>();
@@ -357,13 +422,21 @@ export const useStore = create<AppState>((set, get) => {
       const { tables: sanitizedTables, removedTables } = sanitizeTables(nextTables);
 
       if (removedTables > 0) {
-        console.log(`[updateTablesFromAI] Sanitized ${removedTables} invalid table(s) from AI response`);
+        console.log(
+          `[updateTablesFromAI] Sanitized ${removedTables} invalid table(s) from AI response`
+        );
       }
 
-      return {
+      const updates: Partial<AppState> = {
         tables: sanitizedTables,
         visibleSchemas: mergedVisibleSchemas,
       };
+
+      if (meta?.enumTypes) {
+        updates.enumTypes = meta.enumTypes;
+      }
+
+      return updates;
     });
 
     get().saveToLocalStorage();
@@ -384,6 +457,145 @@ export const useStore = create<AppState>((set, get) => {
             position: { x, y },
           },
         },
+      };
+    });
+    get().saveToLocalStorage();
+  },
+
+  updateTableName: (tableId, newName) => {
+    const currentTables = get().tables;
+    const table = currentTables[tableId];
+    if (!table) return;
+
+    const updatedTables = { ...currentTables };
+    delete updatedTables[tableId];
+    updatedTables[newName] = {
+      ...table,
+      title: newName,
+    };
+
+    // Update expandedTables if the old table was expanded
+    const wasExpanded = get().expandedTables.has(tableId);
+    if (wasExpanded) {
+      const newExpanded = new Set(get().expandedTables);
+      newExpanded.delete(tableId);
+      newExpanded.add(newName);
+      set({ tables: updatedTables, expandedTables: newExpanded });
+    } else {
+      set({ tables: updatedTables });
+    }
+    get().saveToLocalStorage();
+  },
+
+  updateTableColor: (tableId, color) => {
+    set((state) => {
+      const existing = state.tables[tableId];
+      if (!existing) return state;
+
+      return {
+        tables: {
+          ...state.tables,
+          [tableId]: {
+            ...existing,
+            color,
+          },
+        },
+      };
+    });
+    get().saveToLocalStorage();
+  },
+
+  updateTableComment: (tableId, comment) => {
+    set((state) => {
+      const existing = state.tables[tableId];
+      if (!existing) return state;
+
+      return {
+        tables: {
+          ...state.tables,
+          [tableId]: {
+            ...existing,
+            comment,
+          },
+        },
+      };
+    });
+    get().saveToLocalStorage();
+  },
+
+  addColumn: (tableId, column) => {
+    set((state) => {
+      const existing = state.tables[tableId];
+      if (!existing) return state;
+
+      return {
+        tables: {
+          ...state.tables,
+          [tableId]: {
+            ...existing,
+            columns: [...(existing.columns || []), column],
+          },
+        },
+      };
+    });
+    get().saveToLocalStorage();
+  },
+
+  updateColumn: (tableId, columnIndex, updates) => {
+    set((state) => {
+      const existing = state.tables[tableId];
+      if (!existing || !existing.columns) return state;
+
+      const newColumns = [...existing.columns];
+      newColumns[columnIndex] = {
+        ...newColumns[columnIndex],
+        ...updates,
+      };
+
+      return {
+        tables: {
+          ...state.tables,
+          [tableId]: {
+            ...existing,
+            columns: newColumns,
+          },
+        },
+      };
+    });
+    get().saveToLocalStorage();
+  },
+
+  deleteColumn: (tableId, columnIndex) => {
+    set((state) => {
+      const existing = state.tables[tableId];
+      if (!existing || !existing.columns) return state;
+
+      const newColumns = existing.columns.filter((_, idx) => idx !== columnIndex);
+
+      return {
+        tables: {
+          ...state.tables,
+          [tableId]: {
+            ...existing,
+            columns: newColumns,
+          },
+        },
+      };
+    });
+    get().saveToLocalStorage();
+  },
+
+  deleteTable: (tableId) => {
+    set((state) => {
+      const newTables = { ...state.tables };
+      delete newTables[tableId];
+
+      const newExpanded = new Set(state.expandedTables);
+      newExpanded.delete(tableId);
+
+      return {
+        tables: newTables,
+        expandedTables: newExpanded,
       };
     });
     get().saveToLocalStorage();
@@ -561,6 +773,15 @@ export const useStore = create<AppState>((set, get) => {
       if (collapsedSchemasData) {
         set({ collapsedSchemas: new Set(JSON.parse(collapsedSchemasData)) });
       }
+
+      const enumTypesData = localStorage.getItem('enum-types');
+      if (enumTypesData) {
+        try {
+          set({ enumTypes: JSON.parse(enumTypesData) });
+        } catch (error) {
+          console.error('Error parsing enum types from localStorage', error);
+        }
+      }
     } catch (error) {
       console.error('Error loading from localStorage:', error);
     }
@@ -596,6 +817,11 @@ export const useStore = create<AppState>((set, get) => {
     get().saveToLocalStorage();
   },
 
+  setEnumTypes: (types) => {
+    set({ enumTypes: types });
+    get().saveToLocalStorage();
+  },
+
   clearCache: () => {
     if (typeof window === 'undefined') return;
 
@@ -605,6 +831,7 @@ export const useStore = create<AppState>((set, get) => {
       localStorage.removeItem('edge-relationships');
       localStorage.removeItem('visible-schemas');
       localStorage.removeItem('collapsed-schemas');
+      localStorage.removeItem('enum-types');
 
       // Clear timeout if pending
       if (saveTimeoutId) {
