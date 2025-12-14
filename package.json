@@ -7,6 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
+    "typecheck": "tsc --noEmit",
     "analyze": "ANALYZE=true next build",
     "memlab:import": "memlab run --scenario memlab-tests/import-sql.js",
     "memlab:interact": "memlab run --scenario memlab-tests/node-interaction.js",
