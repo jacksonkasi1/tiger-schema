@@ -105,3 +105,63 @@ export interface SupabaseApiKey {
   anon: string;
   last_url: string;
 }
+
+// ============================================================================
+// Streaming Data Types for AI SDK
+// ============================================================================
+
+/**
+ * Progress notification for streaming operations
+ */
+export interface StreamingProgress {
+  message: string;
+  current: number;
+  total: number;
+  phase?: 'fetching' | 'processing' | 'applying';
+}
+
+/**
+ * Batch of tables streamed from the server
+ */
+export interface StreamingTablesBatch {
+  tables: TableState;
+  batchNumber: number;
+  totalBatches?: number;
+  isComplete: boolean;
+}
+
+/**
+ * Transient notification for user feedback
+ */
+export interface StreamingNotification {
+  message: string;
+  level: 'info' | 'success' | 'warning' | 'error';
+}
+
+/**
+ * Union type for all streaming data parts
+ * Used with AI SDK's createUIMessageStream and onData callback
+ */
+export type StreamingDataPart =
+  | { type: 'data-progress'; data: StreamingProgress; transient?: boolean }
+  | { type: 'data-tables-batch'; data: StreamingTablesBatch; id?: string }
+  | {
+      type: 'data-notification';
+      data: StreamingNotification;
+      transient?: boolean;
+    };
+
+/**
+ * Extended UIMessage type with our custom data parts
+ */
+export interface CustomUIMessage {
+  id: string;
+  role: 'user' | 'assistant' | 'system';
+  parts: Array<
+    | { type: 'text'; text: string }
+    | { type: 'data-progress'; data: StreamingProgress }
+    | { type: 'data-tables-batch'; data: StreamingTablesBatch }
+    | { type: 'data-notification'; data: StreamingNotification }
+    | { type: string; [key: string]: unknown } // For tool parts
+  >;
+}
