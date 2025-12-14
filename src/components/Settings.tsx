@@ -12,7 +12,6 @@ import {
   Moon,
   Sun,
   RefreshCw,
-  Check,
   Plus,
   Trash2,
   X as XIcon,
@@ -76,18 +75,10 @@ export function Settings({
     'ai-openai-key',
     '',
   );
-  // We still keep track of selected model, but selection is mainly in chat
-  const [openaiModel, setOpenaiModel] = useLocalStorage<string>(
-    'ai-openai-model',
-    'gpt-4o-mini',
-  );
+
   const [googleApiKey, setGoogleApiKey] = useLocalStorage<string>(
     'ai-google-key',
     '',
-  );
-  const [googleModel, setGoogleModel] = useLocalStorage<string>(
-    'ai-google-model',
-    'gemini-1.5-pro-latest',
   );
 
   // Model lists

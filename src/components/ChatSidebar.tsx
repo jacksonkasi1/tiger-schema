@@ -1,10 +1,15 @@
 'use client';
 
 // ** import types
-import type { Table } from '@/lib/types';
+import type {
+  Table,
+  StreamingProgress,
+  StreamingTablesBatch,
+  StreamingNotification,
+} from '@/lib/types';
 
 // ** import core packages
-import { useState, useRef, useEffect, useMemo } from 'react';
+import { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import { useChat } from '@ai-sdk/react';
 import { DefaultChatTransport } from 'ai';
 
@@ -34,9 +39,7 @@ import {
   Trash2,
   Clipboard,
   Link,
-  Cloud,
 } from 'lucide-react';
-import { Field, FieldLabel } from '@/components/ui/field';
 import { Badge } from '@/components/ui/badge';
 import {
   Tooltip,
@@ -137,6 +140,10 @@ export function ChatSidebar({
   // Manage input state manually (AI SDK 5 pattern)
   const [input, setInput] = useState('');
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
+
+  // Streaming progress state
+  const [streamingProgress, setStreamingProgress] =
+    useState<StreamingProgress | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -165,11 +172,82 @@ export function ChatSidebar({
     );
   }, [tables]);
 
+  // Handler for streaming data parts (called as chunks arrive)
+  // Using 'any' type because AI SDK's onData callback receives unknown data structure
+  const handleStreamingData = useCallback(
+    (dataPart: { type: string; id?: string; data: unknown }) => {
+      console.log('[onData] Received streaming data:', dataPart.type);
+
+      switch (dataPart.type) {
+        case 'data-progress': {
+          const progressData = dataPart.data as StreamingProgress;
+          setStreamingProgress(progressData);
+          console.log('[onData] Progress:', progressData.message);
+          break;
+        }
+
+        case 'data-tables-batch': {
+          const batchData = dataPart.data as StreamingTablesBatch;
+          console.log(
+            `[onData] Tables batch ${batchData.batchNumber}:`,
+            Object.keys(batchData.tables).length,
+            'tables, complete:',
+            batchData.isComplete,
+          );
+
+          // Apply tables incrementally as they stream in
+          if (Object.keys(batchData.tables).length > 0) {
+            updateTablesFromAI(batchData.tables);
+
+            if (batchData.isComplete) {
+              toast.success('Schema updated', {
+                description: `${Object.keys(batchData.tables).length} table${Object.keys(batchData.tables).length === 1 ? '' : 's'} in workspace`,
+              });
+            }
+          }
+          break;
+        }
+
+        case 'data-notification': {
+          const notificationData = dataPart.data as StreamingNotification;
+          console.log(
+            '[onData] Notification:',
+            notificationData.level,
+            notificationData.message,
+          );
+
+          // Show notifications as toasts based on level
+          if (notificationData) {
+            switch (notificationData.level) {
+              case 'success':
+                toast.success(notificationData.message);
+                break;
+              case 'error':
+                toast.error(notificationData.message);
+                break;
+              case 'warning':
+                toast.warning(notificationData.message);
+                break;
+              default:
+                toast.info(notificationData.message);
+            }
+          }
+          break;
+        }
+      }
+    },
+    [updateTablesFromAI],
+  );
+
   // Use Vercel AI SDK 5's useChat hook
   const { messages, sendMessage, status, setMessages } = useChat({
     id: 'sql-assistant',
     transport,
+    // Handle streaming data parts as they arrive
+    onData: handleStreamingData,
     onFinish: ({ message }) => {
+      // Clear streaming progress when finished
+      setStreamingProgress(null);
       console.log('[onFinish] Processing message:', {
         id: message.id,
         role: message.role,
@@ -249,11 +327,13 @@ export function ChatSidebar({
 
       if (toolsExecuted > 0 && !schemaUpdated) {
         console.log(
-          '[onFinish] ⚠️ Tools executed but no schema updates detected',
+          '[onFinish] ⚠️ Tools executed but no schema updates detected - may have been handled by onData',
         );
       }
     },
     onError: (error) => {
+      // Clear streaming progress on error
+      setStreamingProgress(null);
       console.error('Chat error:', error);
       toast.error('Assistant request failed', {
         description: error.message,
@@ -608,8 +688,18 @@ export function ChatSidebar({
           </div>
         )}
         {isLoading && (
-          <div className="text-sm text-muted-foreground animate-pulse">
-            Generating response...
+          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+            <div className="h-4 w-4 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+            <span>
+              {streamingProgress
+                ? streamingProgress.message
+                : 'Generating response...'}
+            </span>
+            {streamingProgress && streamingProgress.total > 1 && (
+              <span className="text-xs opacity-70">
+                ({streamingProgress.current}/{streamingProgress.total})
+              </span>
+            )}
           </div>
         )}
         <div ref={chatEndRef} />
