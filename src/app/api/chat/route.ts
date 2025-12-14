@@ -1,8 +1,32 @@
-import { streamText, tool, convertToModelMessages, stepCountIs } from 'ai';
+import {
+  streamText,
+  tool,
+  convertToModelMessages,
+  stepCountIs,
+  createUIMessageStream,
+  createUIMessageStreamResponse,
+} from 'ai';
 import { openai, createOpenAI } from '@ai-sdk/openai';
 import { google, createGoogleGenerativeAI } from '@ai-sdk/google';
 import { z } from 'zod';
-import type { Column, Table, TableState } from '@/lib/types';
+import type {
+  Column,
+  Table,
+  TableState,
+  StreamingProgress,
+  StreamingTablesBatch,
+  StreamingNotification,
+} from '@/lib/types';
+
+// Type for our custom streaming data parts
+type CustomDataPart =
+  | { type: 'data-progress'; data: StreamingProgress; transient?: boolean }
+  | { type: 'data-tables-batch'; data: StreamingTablesBatch; id?: string }
+  | {
+      type: 'data-notification';
+      data: StreamingNotification;
+      transient?: boolean;
+    };
 
 export const runtime = 'nodejs';
 
@@ -98,7 +122,7 @@ const modifySchemaParams = z.object({
             })
             .partial(),
         }),
-      ])
+      ]),
     )
     .min(1),
 });
@@ -196,7 +220,6 @@ Response: "Added a phone column (varchar, optional) to the users table."
 - Be clear: always explain what you did in plain English
 - Be accurate: when reporting counts, use the actual numbers from tool results`;
 
-
 export async function POST(req: Request) {
   try {
     const body = await req.json().catch(() => null);
@@ -216,27 +239,23 @@ export async function POST(req: Request) {
       body.provider === 'google' || body.provider === 'openai'
         ? body.provider
         : 'openai';
-    const apiKey =
-      typeof body.apiKey === 'string' ? body.apiKey.trim() : '';
+    const apiKey = typeof body.apiKey === 'string' ? body.apiKey.trim() : '';
 
     const modelName =
       typeof body.model === 'string' && body.model.trim().length > 0
         ? body.model.trim()
         : providerKey === 'google'
-        ? 'gemini-1.5-pro-latest'
-        : 'gpt-4o-mini';
+          ? 'gemini-1.5-pro-latest'
+          : 'gpt-4o-mini';
 
     let model;
     try {
       if (providerKey === 'openai') {
-        const provider =
-          apiKey.length > 0 ? createOpenAI({ apiKey }) : openai;
+        const provider = apiKey.length > 0 ? createOpenAI({ apiKey }) : openai;
         model = provider(modelName);
       } else {
         const provider =
-          apiKey.length > 0
-            ? createGoogleGenerativeAI({ apiKey })
-            : google;
+          apiKey.length > 0 ? createGoogleGenerativeAI({ apiKey }) : google;
         model = provider(modelName);
       }
     } catch (error) {
@@ -246,7 +265,9 @@ export async function POST(req: Request) {
     }
 
     const schemaState = cloneTables(body.schema);
-    console.log(`[API] 📥 Received schema with ${Object.keys(schemaState).length} tables`);
+    console.log(
+      `[API] 📥 Received schema with ${Object.keys(schemaState).length} tables`,
+    );
 
     const applySchemaOperations = (input: ModifySchemaInput) => {
       let ok = true;
@@ -371,7 +392,7 @@ export async function POST(req: Request) {
             }
 
             const nextColumns = table.columns.filter(
-              (column) => column.title !== operation.columnName
+              (column) => column.title !== operation.columnName,
             );
 
             if (nextColumns.length === table.columns.length) {
@@ -408,7 +429,7 @@ export async function POST(req: Request) {
             }
 
             const columnIndex = table.columns.findIndex(
-              (column) => column.title === operation.columnName
+              (column) => column.title === operation.columnName,
             );
 
             if (columnIndex === -1) {
@@ -436,7 +457,7 @@ export async function POST(req: Request) {
             }
 
             table.columns = table.columns.map((column, index) =>
-              index === columnIndex ? updatedColumn : column
+              index === columnIndex ? updatedColumn : column,
             );
 
             operationsApplied.push({
@@ -506,7 +527,7 @@ export async function POST(req: Request) {
               if (
                 !tableId.toLowerCase().includes(target) &&
                 !(table.columns ?? []).some((column) =>
-                  column.title.toLowerCase().includes(target)
+                  column.title.toLowerCase().includes(target),
                 )
               ) {
                 return false;
@@ -525,11 +546,13 @@ export async function POST(req: Request) {
               title: table.title,
               isView: table.is_view ?? false,
               columnCount: table.columns?.length ?? 0,
-              columns: includeColumns ? table.columns ?? [] : undefined,
+              columns: includeColumns ? (table.columns ?? []) : undefined,
             })),
           };
 
-          console.log(`[listTables] Returning ${result.tables.length} of ${result.total} tables (includeColumns: ${includeColumns})`);
+          console.log(
+            `[listTables] Returning ${result.tables.length} of ${result.total} tables (includeColumns: ${includeColumns})`,
+          );
           return result;
         },
       }),
@@ -561,10 +584,12 @@ export async function POST(req: Request) {
 
           // Add summary for better AI understanding
           const successCount = result.operationsApplied.filter(
-            (op) => op.status === 'success'
+            (op) => op.status === 'success',
           ).length;
 
-          console.log(`[modifySchema] Applied ${successCount} of ${input.operations.length} operations. Schema now has ${Object.keys(schemaState).length} tables.`);
+          console.log(
+            `[modifySchema] Applied ${successCount} of ${input.operations.length} operations. Schema now has ${Object.keys(schemaState).length} tables.`,
+          );
 
           return {
             ...result,
@@ -582,29 +607,127 @@ export async function POST(req: Request) {
       }),
     };
 
+    // Helper to write streaming data parts
+    const writeDataPart = (
+      writer: { write: (part: CustomDataPart) => void },
+      part: CustomDataPart,
+    ) => {
+      writer.write(part);
+    };
+
     // Convert UIMessages to ModelMessages
     const modelMessages = convertToModelMessages(messages);
 
-    const result = streamText({
-      model,
-      system: SYSTEM_PROMPT,
-      messages: modelMessages,
-      maxRetries: 1,
-      temperature: 0.7,
-      tools,
-      // Enable autonomous multi-step tool calling (like Cline's agentic loop)
-      stopWhen: stepCountIs(20), // AI can make up to 20 autonomous tool calls
-      onStepFinish: ({ toolCalls, toolResults, finishReason, text }) => {
-        console.log(`[Step] Tool calls: ${toolCalls?.length || 0}, Results: ${toolResults?.length || 0}, Text: ${text ? text.substring(0, 50) : 'none'}, Finish: ${finishReason}`);
-        if (toolCalls) {
-          toolCalls.forEach((call, i) => {
-            console.log(`  Tool ${i + 1}: ${call.toolName}`);
+    // Create a custom UI message stream with streaming data parts support
+    const stream = createUIMessageStream({
+      execute: async ({ writer }) => {
+        // Send initial notification (transient - won't be persisted in message history)
+        writeDataPart(writer, {
+          type: 'data-notification',
+          data: {
+            message: 'Processing your request...',
+            level: 'info',
+          },
+          transient: true,
+        });
+
+        let stepCount = 0;
+        let lastTablesSnapshot: TableState | null = null;
+
+        const result = streamText({
+          model,
+          system: SYSTEM_PROMPT,
+          messages: modelMessages,
+          maxRetries: 1,
+          temperature: 0.7,
+          tools,
+          // Enable autonomous multi-step tool calling (like Cline's agentic loop)
+          stopWhen: stepCountIs(20), // AI can make up to 20 autonomous tool calls
+          onStepFinish: ({ toolCalls, toolResults, finishReason, text }) => {
+            stepCount++;
+            console.log(
+              `[Step ${stepCount}] Tool calls: ${toolCalls?.length || 0}, Results: ${toolResults?.length || 0}, Text: ${text ? text.substring(0, 50) : 'none'}, Finish: ${finishReason}`,
+            );
+
+            if (toolCalls) {
+              toolCalls.forEach((call, i) => {
+                console.log(`  Tool ${i + 1}: ${call.toolName}`);
+
+                // Send progress notification for tool calls
+                writeDataPart(writer, {
+                  type: 'data-progress',
+                  data: {
+                    message: `Executing ${call.toolName}...`,
+                    current: stepCount,
+                    total: 20, // Max steps
+                    phase: 'processing',
+                  },
+                  transient: true,
+                });
+
+                // If modifySchema was called, send the updated tables
+                if (call.toolName === 'modifySchema') {
+                  // Check if schema state has changed
+                  const currentSnapshot = JSON.stringify(schemaState);
+                  const lastSnapshot = lastTablesSnapshot
+                    ? JSON.stringify(lastTablesSnapshot)
+                    : null;
+
+                  if (currentSnapshot !== lastSnapshot) {
+                    console.log(
+                      `[Streaming] Sending tables batch with ${Object.keys(schemaState).length} tables`,
+                    );
+
+                    // Send tables batch for incremental updates
+                    writeDataPart(writer, {
+                      type: 'data-tables-batch',
+                      id: `tables-batch-${stepCount}`,
+                      data: {
+                        tables: { ...schemaState },
+                        batchNumber: stepCount,
+                        isComplete: false,
+                      },
+                    });
+
+                    lastTablesSnapshot = { ...schemaState };
+                  }
+                }
+              });
+            }
+          },
+        });
+
+        // Merge the model's stream into our custom stream
+        writer.merge(result.toUIMessageStream());
+
+        // Wait for the stream to complete
+        await result.text;
+
+        // Send final tables state if there were any changes
+        if (lastTablesSnapshot) {
+          writeDataPart(writer, {
+            type: 'data-tables-batch',
+            id: 'tables-final',
+            data: {
+              tables: { ...schemaState },
+              batchNumber: stepCount + 1,
+              isComplete: true,
+            },
+          });
+
+          writeDataPart(writer, {
+            type: 'data-notification',
+            data: {
+              message: `Schema updated with ${Object.keys(schemaState).length} tables`,
+              level: 'success',
+            },
+            transient: true,
           });
         }
       },
     });
 
-    return result.toUIMessageStreamResponse();
+    return createUIMessageStreamResponse({ stream });
   } catch (error) {
     console.error('[api/chat] unexpected error:', error);
     const message =
@@ -612,5 +735,3 @@ export async function POST(req: Request) {
     return new Response(message, { status: 500 });
   }
 }
-
-
