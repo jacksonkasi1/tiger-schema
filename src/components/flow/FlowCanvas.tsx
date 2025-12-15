@@ -776,19 +776,36 @@ function FlowCanvasInner() {
   const onConnect = useCallback(
     (params: Connection) => {
       // Helper to parse handle ids: "<table>_<col>_<index>"
-      const parseHandle = (handleId?: string | null) => {
-        if (!handleId) return null;
-        const parts = handleId.split('_');
+      // Now using nodeId (table name) to correctly identify the split point
+      const parseHandle = (handleId: string | null, nodeId: string | null) => {
+        if (!handleId || !nodeId) return null;
+
+        // Ensure the handle belongs to the node
+        if (!handleId.startsWith(`${nodeId}_`)) return null;
+
+        // Extract the part after the node id
+        const remainder = handleId.slice(nodeId.length + 1);
+        const parts = remainder.split('_');
+
+        // Last part is the index
         const idxPart = parts.pop();
         const index = idxPart ? Number(idxPart) : NaN;
-        const col = parts.pop() ?? '';
-        const table = parts.join('_');
-        return { table, col, index };
+
+        // The rest is the column name (which might contain underscores)
+        const col = parts.join('_');
+
+        return { table: nodeId, col, index };
       };
 
       try {
-        const src = parseHandle(params.sourceHandle as string | null);
-        const tgt = parseHandle(params.targetHandle as string | null);
+        const src = parseHandle(
+          params.sourceHandle as string | null,
+          params.source,
+        );
+        const tgt = parseHandle(
+          params.targetHandle as string | null,
+          params.target,
+        );
 
         if (
           src &&
