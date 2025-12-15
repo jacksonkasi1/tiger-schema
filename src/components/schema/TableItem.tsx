@@ -50,13 +50,24 @@ import {
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { ColumnEditor } from './ColumnEditor';
-import { cn } from '@/lib/utils';
+import { cn, getTableHeaderColor } from '@/lib/utils';
 
 const TABLE_COLORS = [
-  '#EC4899', '#A855F7', '#8B5CF6', '#6366F1',
-  '#3B82F6', '#0EA5E9', '#06B6D4', '#14B8A6',
-  '#10B981', '#22C55E', '#84CC16', '#EAB308',
-  '#F59E0B', '#F97316', '#EF4444',
+  '#EC4899',
+  '#A855F7',
+  '#8B5CF6',
+  '#6366F1',
+  '#3B82F6',
+  '#0EA5E9',
+  '#06B6D4',
+  '#14B8A6',
+  '#10B981',
+  '#22C55E',
+  '#84CC16',
+  '#EAB308',
+  '#F59E0B',
+  '#F97316',
+  '#EF4444',
 ];
 
 interface TableItemProps {
@@ -77,7 +88,7 @@ export function TableItem({ tableId }: TableItemProps) {
 
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [showColorPicker, setShowColorPicker] = useState(false);
-  
+
   const table = tables[tableId];
   const isExpanded = expandedTables.has(tableId);
 
@@ -119,17 +130,17 @@ export function TableItem({ tableId }: TableItemProps) {
       <div
         ref={setNodeRef}
         style={style}
-        className={cn(
-          'group transition-colors',
-          isDragging && 'opacity-50'
-        )}
+        className={cn('group transition-colors', isDragging && 'opacity-50')}
       >
-        <Collapsible open={isExpanded} onOpenChange={() => toggleTableExpanded(tableId)}>
+        <Collapsible
+          open={isExpanded}
+          onOpenChange={() => toggleTableExpanded(tableId)}
+        >
           <div
             className="flex items-center gap-2 px-3 py-2 hover:bg-muted/40 transition-colors border-l-[3px] border-transparent hover:border-primary/40"
             style={{
               backgroundColor: isExpanded
-                ? `${table.color || 'hsl(var(--primary))'}10`
+                ? `${table.color || getTableHeaderColor(table.title)}10`
                 : undefined,
             }}
           >
@@ -162,7 +173,10 @@ export function TableItem({ tableId }: TableItemProps) {
                 >
                   <div
                     className="w-3 h-3 rounded-sm border border-border/50"
-                    style={{ backgroundColor: table.color || 'hsl(var(--primary))' }}
+                    style={{
+                      backgroundColor:
+                        table.color || getTableHeaderColor(table.title),
+                    }}
                   />
                 </button>
               </PopoverTrigger>
@@ -175,7 +189,8 @@ export function TableItem({ tableId }: TableItemProps) {
                         key={color}
                         className={cn(
                           'h-8 w-8 rounded-md transition-all hover:scale-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring relative',
-                          table.color === color && 'ring-2 ring-offset-2 ring-offset-background'
+                          table.color === color &&
+                            'ring-2 ring-offset-2 ring-offset-background',
                         )}
                         style={{ backgroundColor: color }}
                         onClick={() => {
@@ -230,7 +245,10 @@ export function TableItem({ tableId }: TableItemProps) {
             )}
 
             {/* 3) Column Count Badge - Always Visible */}
-            <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-5 shrink-0 font-normal">
+            <Badge
+              variant="secondary"
+              className="text-[10px] px-1.5 py-0 h-5 shrink-0 font-normal"
+            >
               {table.columns?.length || 0}
             </Badge>
 
@@ -318,7 +336,7 @@ export function TableItem({ tableId }: TableItemProps) {
             <div
               className="border-t border-border/20"
               style={{
-                backgroundColor: `${table.color || 'hsl(var(--primary))'}05`,
+                backgroundColor: `${table.color || getTableHeaderColor(table.title)}05`,
               }}
             >
               {/* Columns List */}
@@ -355,8 +373,8 @@ export function TableItem({ tableId }: TableItemProps) {
           <AlertDialogHeader>
             <AlertDialogTitle>Delete Table</AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to delete &quot;{table.title}&quot;? This action cannot be
-              undone.
+              Are you sure you want to delete &quot;{table.title}&quot;? This
+              action cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

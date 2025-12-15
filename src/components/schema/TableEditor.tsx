@@ -92,7 +92,9 @@ export function TableEditor({ tableId, onClose }: TableEditorProps) {
   } = useStore();
 
   const table = tables[tableId];
-  const [selectedTableId, setSelectedTableId] = useState<string | null>(tableId);
+  const [selectedTableId, setSelectedTableId] = useState<string | null>(
+    tableId,
+  );
   const [searchQuery, setSearchQuery] = useState('');
   const [editingTableName, setEditingTableName] = useState(false);
   const [tableNameValue, setTableNameValue] = useState(table?.title || '');
@@ -103,7 +105,7 @@ export function TableEditor({ tableId, onClose }: TableEditorProps) {
   const tableIds = Object.keys(tables);
   const filteredTableIds = searchQuery
     ? tableIds.filter((id) =>
-        tables[id]?.title?.toLowerCase().includes(searchQuery.toLowerCase())
+        tables[id]?.title?.toLowerCase().includes(searchQuery.toLowerCase()),
       )
     : tableIds;
 
@@ -119,7 +121,10 @@ export function TableEditor({ tableId, onClose }: TableEditorProps) {
     addColumn(selectedTableId || tableId, newColumn);
   };
 
-  const handleUpdateColumn = (columnIndex: number, updates: Partial<Column>) => {
+  const handleUpdateColumn = (
+    columnIndex: number,
+    updates: Partial<Column>,
+  ) => {
     updateColumn(selectedTableId || tableId, columnIndex, updates);
   };
 
@@ -139,17 +144,12 @@ export function TableEditor({ tableId, onClose }: TableEditorProps) {
     if (column.unique) return 'unique_key';
     // Check if column is in any index
     const indexes = currentTable.indexes || [];
-    const isInIndex = indexes.some((idx) =>
-      idx.columns.includes(column.title)
-    );
+    const isInIndex = indexes.some((idx) => idx.columns.includes(column.title));
     if (isInIndex) return 'index';
     return 'none';
   };
 
-  const handleIndexTypeChange = (
-    columnIndex: number,
-    indexType: IndexType
-  ) => {
+  const handleIndexTypeChange = (columnIndex: number, indexType: IndexType) => {
     const column = currentTable.columns?.[columnIndex];
     if (!column) return;
 
@@ -340,7 +340,7 @@ export function TableEditor({ tableId, onClose }: TableEditorProps) {
               const indexType = getIndexType(column);
               return (
                 <div
-                  key={`${column.title}-${index}`}
+                  key={`${tableId}-col-${index}`}
                   className="group flex items-center gap-3 py-2 px-3 rounded-lg hover:bg-slate-800/40 transition-colors"
                 >
                   {/* Drag Handle */}
@@ -394,11 +394,7 @@ export function TableEditor({ tableId, onClose }: TableEditorProps) {
                   {/* Index Type Selector */}
                   <Popover>
                     <PopoverTrigger asChild>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="h-8 w-8 p-0"
-                      >
+                      <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
                         {indexType === 'primary_key' ? (
                           <Key className="h-4 w-4 text-green-500" />
                         ) : indexType === 'unique_key' ? (
@@ -565,7 +561,10 @@ export function TableEditor({ tableId, onClose }: TableEditorProps) {
               </div>
             </Button>
           </PopoverTrigger>
-          <PopoverContent className="w-auto p-3 bg-slate-800 border-slate-700" align="end">
+          <PopoverContent
+            className="w-auto p-3 bg-slate-800 border-slate-700"
+            align="end"
+          >
             <div className="grid grid-cols-4 gap-2">
               {COLORS.map((color) => (
                 <button
@@ -593,4 +592,3 @@ export function TableEditor({ tableId, onClose }: TableEditorProps) {
     </div>
   );
 }
-

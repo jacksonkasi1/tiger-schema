@@ -13,7 +13,6 @@ import {
   DragOverlay,
 } from '@dnd-kit/core';
 import {
-  arrayMove,
   SortableContext,
   sortableKeyboardCoordinates,
   verticalListSortingStrategy,
@@ -27,7 +26,7 @@ interface ColumnEditorProps {
 }
 
 export function ColumnEditor({ tableId, columns }: ColumnEditorProps) {
-  const { updateColumn } = useStore();
+  const { reorderColumns } = useStore();
   const [activeId, setActiveId] = useState<string | null>(null);
 
   const sensors = useSensors(
@@ -38,7 +37,7 @@ export function ColumnEditor({ tableId, columns }: ColumnEditorProps) {
     }),
     useSensor(KeyboardSensor, {
       coordinateGetter: sortableKeyboardCoordinates,
-    })
+    }),
   );
 
   const handleDragStart = (event: any) => {
@@ -52,12 +51,7 @@ export function ColumnEditor({ tableId, columns }: ColumnEditorProps) {
       const oldIndex = parseInt(active.id as string);
       const newIndex = parseInt(over.id as string);
 
-      const reorderedColumns = arrayMove(columns, oldIndex, newIndex);
-      
-      // Update all column positions
-      reorderedColumns.forEach((col, index) => {
-        updateColumn(tableId, index, col);
-      });
+      reorderColumns(tableId, oldIndex, newIndex);
     }
 
     setActiveId(null);
@@ -81,7 +75,7 @@ export function ColumnEditor({ tableId, columns }: ColumnEditorProps) {
       >
         {columns.map((column, index) => (
           <ColumnRow
-            key={`${column.title}-${index}`}
+            key={`${tableId}-col-${index}`}
             tableId={tableId}
             column={column}
             columnIndex={index}

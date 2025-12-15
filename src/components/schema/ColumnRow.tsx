@@ -25,6 +25,7 @@ import {
   CommandGroup,
   CommandInput,
   CommandItem,
+  CommandList,
 } from '@/components/ui/command';
 import {
   Tooltip,
@@ -43,6 +44,7 @@ import {
   Check,
   ChevronsUpDown,
   Link2,
+  X,
 } from 'lucide-react';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
@@ -91,6 +93,7 @@ export function ColumnRow({
 }: ColumnRowProps) {
   const { tables, updateColumn, deleteColumn } = useStore();
   const [typeOpen, setTypeOpen] = useState(false);
+  const [fkOpen, setFkOpen] = useState(false);
 
   const table = tables[tableId];
 
@@ -135,6 +138,23 @@ export function ColumnRow({
 
   const indexType = getIndexType();
 
+  // Get all tables and columns for FK selector
+  const getFkOptions = () => {
+    const options: { label: string; value: string }[] = [];
+    Object.values(tables).forEach((t) => {
+      if (t.title === tableId) return; // Skip self
+      t.columns?.forEach((col) => {
+        options.push({
+          label: `${t.title}.${col.title}`,
+          value: `${t.title}.${col.title}`,
+        });
+      });
+    });
+    return options;
+  };
+
+  const fkOptions = getFkOptions();
+
   return (
     <div
       ref={setNodeRef}
@@ -142,7 +162,7 @@ export function ColumnRow({
       className={cn(
         'group flex items-center gap-1.5 px-2.5 py-0.5 hover:bg-muted/50 transition-colors',
         isDragging && 'opacity-0',
-        isDragOverlay && 'shadow-lg'
+        isDragOverlay && 'shadow-lg',
       )}
     >
       {/* Drag Handle */}
@@ -199,7 +219,9 @@ export function ColumnRow({
       {/* Column Name */}
       <Input
         value={column.title}
-        onChange={(e) => updateColumn(tableId, columnIndex, { title: e.target.value })}
+        onChange={(e) =>
+          updateColumn(tableId, columnIndex, { title: e.target.value })
+        }
         className="h-6 flex-1 text-[13px] font-mono border-transparent hover:border-input focus-visible:border-primary bg-transparent px-1.5"
         placeholder="column_name"
       />
@@ -213,17 +235,24 @@ export function ColumnRow({
             aria-expanded={typeOpen}
             className="h-6 w-[100px] justify-between text-[11px] font-mono px-1.5 bg-muted/30"
           >
-            <span className="truncate">{column.format || column.type || 'varchar'}</span>
+            <span className="truncate">
+              {column.format || column.type || 'varchar'}
+            </span>
             <ChevronsUpDown className="ml-1 h-3 w-3 shrink-0 opacity-50" />
           </Button>
         </PopoverTrigger>
-        <PopoverContent className="w-[200px] p-0 border-border/50 shadow-xl" align="end">
+        <PopoverContent
+          className="w-[200px] p-0 border-border/50 shadow-xl"
+          align="end"
+        >
           <Command className="bg-popover">
-            <CommandInput 
-              placeholder="Search type..." 
-              className="h-8 text-xs font-mono border-0 outline-none ring-0 focus:outline-none focus:ring-0" 
+            <CommandInput
+              placeholder="Search type..."
+              className="h-8 text-xs font-mono border-0 outline-none ring-0 focus:outline-none focus:ring-0"
             />
-            <CommandEmpty className="py-2 text-xs text-muted-foreground text-center">No type found.</CommandEmpty>
+            <CommandEmpty className="py-2 text-xs text-muted-foreground text-center">
+              No type found.
+            </CommandEmpty>
             <CommandGroup className="max-h-[200px] overflow-auto p-1">
               {POSTGRES_TYPES.map((type) => (
                 <CommandItem
@@ -238,7 +267,9 @@ export function ColumnRow({
                   <Check
                     className={cn(
                       'mr-2 h-3 w-3 text-teal-500',
-                      (column.format || column.type) === type ? 'opacity-100' : 'opacity-0'
+                      (column.format || column.type) === type
+                        ? 'opacity-100'
+                        : 'opacity-0',
                     )}
                   />
                   {type}
@@ -263,17 +294,85 @@ export function ColumnRow({
                 'h-6 w-7 flex items-center justify-center text-[10px] font-bold rounded border transition-colors shrink-0',
                 column.required
                   ? 'bg-teal-500/15 text-teal-600 border-teal-500/30 dark:text-teal-400'
-                  : 'bg-muted/30 text-muted-foreground/60 border-border/50 hover:bg-muted/50'
+                  : 'bg-muted/30 text-muted-foreground/60 border-border/50 hover:bg-muted/50',
               )}
             >
               {column.required ? 'NN' : 'N'}
             </button>
           </TooltipTrigger>
           <TooltipContent>
-            <p>{column.required ? 'NOT NULL (click to allow NULL)' : 'Nullable (click to require)'}</p>
+            <p>
+              {column.required
+                ? 'NOT NULL (click to allow NULL)'
+                : 'Nullable (click to require)'}
+            </p>
           </TooltipContent>
         </Tooltip>
       </TooltipProvider>
+
+      {/* FK Selector */}
+      <Popover open={fkOpen} onOpenChange={setFkOpen}>
+        <PopoverTrigger asChild>
+          <Button
+            variant={column.fk ? 'default' : 'ghost'}
+            size="icon"
+            className={cn(
+              'h-6 w-6 shrink-0 transition-opacity',
+              column.fk
+                ? 'bg-emerald-500/20 text-emerald-600 hover:bg-emerald-500/30 dark:text-emerald-400'
+                : 'opacity-0 group-hover:opacity-100',
+            )}
+          >
+            <Link2 className="h-3.5 w-3.5" />
+          </Button>
+        </PopoverTrigger>
+        <PopoverContent className="w-[280px] p-0" align="end">
+          <Command>
+            <CommandInput
+              placeholder="Search table.column..."
+              className="h-9"
+            />
+            <CommandList>
+              <CommandEmpty>No columns found.</CommandEmpty>
+              <CommandGroup>
+                {column.fk && (
+                  <CommandItem
+                    onSelect={() => {
+                      updateColumn(tableId, columnIndex, { fk: undefined });
+                      setFkOpen(false);
+                    }}
+                    className="text-destructive"
+                  >
+                    <X className="mr-2 h-4 w-4" />
+                    Remove FK reference
+                  </CommandItem>
+                )}
+                {fkOptions.map((option) => (
+                  <CommandItem
+                    key={option.value}
+                    value={option.value}
+                    onSelect={() => {
+                      updateColumn(tableId, columnIndex, { fk: option.value });
+                      setFkOpen(false);
+                    }}
+                    className="text-xs font-mono"
+                  >
+                    <Check
+                      className={cn(
+                        'mr-2 h-3 w-3',
+                        column.fk === option.value
+                          ? 'opacity-100'
+                          : 'opacity-0',
+                      )}
+                    />
+                    {option.label}
+                  </CommandItem>
+                ))}
+              </CommandGroup>
+            </CommandList>
+          </Command>
+        </PopoverContent>
+      </Popover>
 
       {/* More Options */}
       <DropdownMenu>
@@ -298,7 +397,10 @@ export function ColumnRow({
             Set {column.required ? 'NULL' : 'NOT NULL'}
           </DropdownMenuItem>
           <DropdownMenuSeparator />
-          <DropdownMenuItem onClick={() => deleteColumn(tableId, columnIndex)} className="text-destructive">
+          <DropdownMenuItem
+            onClick={() => deleteColumn(tableId, columnIndex)}
+            className="text-destructive"
+          >
             <Trash2 className="mr-2 h-3.5 w-3.5" />
             Delete
           </DropdownMenuItem>

@@ -3,20 +3,23 @@
 import { memo } from 'react';
 import { Handle, Position, NodeProps } from '@xyflow/react';
 import { Key, Link2, Sparkles, Circle } from 'lucide-react';
-import { cn } from '@/lib/utils';
+import { cn, getTableHeaderColor } from '@/lib/utils';
 import { TableNodeData } from '@/types/flow';
 
 function ModernTableNodeComponent({ data, selected, id }: NodeProps) {
   const tableData = data as unknown as TableNodeData;
   const tableName = id;
-  const headerColor = (tableData as any).color || '#3B82F6';
+  const headerColor =
+    (tableData as any).color || getTableHeaderColor(tableName);
 
   return (
     <div
       className={cn(
         'rounded-lg overflow-hidden bg-background shadow-lg transition-all',
         'border-2',
-        selected ? 'border-primary ring-2 ring-primary/20 shadow-xl' : 'border-border'
+        selected
+          ? 'border-primary ring-2 ring-primary/20 shadow-xl'
+          : 'border-border',
       )}
       style={{
         minWidth: '240px',
@@ -50,7 +53,7 @@ function ModernTableNodeComponent({ data, selected, id }: NodeProps) {
                 'relative group py-2 px-3 flex items-center gap-2 border-b border-border/50 last:border-b-0',
                 'hover:bg-muted/40 transition-colors',
                 'border-l-[3px] border-transparent',
-                isPK && 'border-l-yellow-500/50'
+                isPK && 'border-l-yellow-500/50',
               )}
             >
               {/* Connection Handles */}
@@ -70,7 +73,7 @@ function ModernTableNodeComponent({ data, selected, id }: NodeProps) {
                 id={handleId}
                 className={cn(
                   '!w-2.5 !h-2.5 !border-2 !border-background',
-                  isPK ? '!bg-blue-500' : '!bg-muted-foreground/40'
+                  isPK ? '!bg-blue-500' : '!bg-muted-foreground/40',
                 )}
                 style={{ top: '50%', transform: 'translateY(-50%)' }}
               />
