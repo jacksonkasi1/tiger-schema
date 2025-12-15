@@ -93,9 +93,18 @@ const POSTGRES_TYPES = [
 ];
 
 const COLORS = [
-  '#EC4899', '#A855F7', '#1E40AF', '#3B82F6',
-  '#14B8A6', '#06B6D4', '#84CC16', '#22C55E',
-  '#EAB308', '#F97316', '#EF4444', '#6B7280',
+  '#EC4899',
+  '#A855F7',
+  '#1E40AF',
+  '#3B82F6',
+  '#14B8A6',
+  '#06B6D4',
+  '#84CC16',
+  '#22C55E',
+  '#EAB308',
+  '#F97316',
+  '#EF4444',
+  '#6B7280',
 ];
 
 type IndexType = 'primary_key' | 'unique_key' | 'index' | 'none';
@@ -207,7 +216,7 @@ export function TableCollapsible({ tableId }: TableCollapsibleProps) {
         <div
           className={cn(
             'group border-b border-border/10 hover:bg-muted/20 transition-colors',
-            isDragging && 'opacity-50 scale-[0.98] shadow-lg z-50'
+            isDragging && 'opacity-50 scale-[0.98] shadow-lg z-50',
           )}
         >
           <div className="flex items-center gap-1.5 px-2 py-1.5">
@@ -297,7 +306,11 @@ export function TableCollapsible({ tableId }: TableCollapsibleProps) {
               {/* 3-Dots Menu */}
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <Button variant="ghost" size="icon" className="h-5 w-5 hover:bg-accent/60">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-5 w-5 hover:bg-accent/60"
+                  >
                     <MoreVertical className="h-3 w-3" />
                   </Button>
                 </DropdownMenuTrigger>
@@ -330,13 +343,15 @@ export function TableCollapsible({ tableId }: TableCollapsibleProps) {
                 {table.columns && table.columns.length > 0 ? (
                   table.columns.map((column, index) => (
                     <ColumnRow
-                      key={`${column.title}-${index}`}
+                      key={`${tableId}-col-${index}`}
                       tableId={tableId}
                       column={column}
                       columnIndex={index}
                       indexType={getIndexType(column)}
                       onIndexTypeChange={handleIndexTypeChange}
-                      onUpdate={(updates) => updateColumn(tableId, index, updates)}
+                      onUpdate={(updates) =>
+                        updateColumn(tableId, index, updates)
+                      }
                       onDelete={() => deleteColumn(tableId, index)}
                     />
                   ))
@@ -360,11 +375,16 @@ export function TableCollapsible({ tableId }: TableCollapsibleProps) {
                     >
                       <div
                         className="h-3.5 w-3.5 rounded border border-border/30"
-                        style={{ backgroundColor: table.color || 'hsl(var(--primary))' }}
+                        style={{
+                          backgroundColor: table.color || 'hsl(var(--primary))',
+                        }}
                       />
                     </Button>
                   </PopoverTrigger>
-                  <PopoverContent className="w-auto p-2.5 bg-popover/95 backdrop-blur-sm" align="start">
+                  <PopoverContent
+                    className="w-auto p-2.5 bg-popover/95 backdrop-blur-sm"
+                    align="start"
+                  >
                     <div className="grid grid-cols-4 gap-1.5">
                       {COLORS.map((color) => (
                         <button
@@ -405,8 +425,8 @@ export function TableCollapsible({ tableId }: TableCollapsibleProps) {
           <AlertDialogHeader>
             <AlertDialogTitle>Delete Table</AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to delete &quot;{table.title}&quot;? This action cannot be
-              undone.
+              Are you sure you want to delete &quot;{table.title}&quot;? This
+              action cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -460,7 +480,11 @@ function ColumnRow({
       {/* Index Type Icon */}
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button variant="ghost" size="icon" className="h-5 w-5 shrink-0 hover:bg-accent/50">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-5 w-5 shrink-0 hover:bg-accent/50"
+          >
             {indexType === 'primary_key' ? (
               <Key className="h-3 w-3 text-amber-500" />
             ) : indexType === 'unique_key' ? (
@@ -475,7 +499,9 @@ function ColumnRow({
         <DropdownMenuContent align="start" className="w-48">
           <DropdownMenuRadioGroup
             value={indexType}
-            onValueChange={(value) => onIndexTypeChange(columnIndex, value as IndexType)}
+            onValueChange={(value) =>
+              onIndexTypeChange(columnIndex, value as IndexType)
+            }
           >
             <DropdownMenuRadioItem value="primary_key" className="text-sm">
               <Key className="mr-2 h-3.5 w-3.5 text-amber-500" />
@@ -514,17 +540,24 @@ function ColumnRow({
             aria-expanded={typeOpen}
             className="h-6 w-[100px] justify-between text-[11px] font-mono px-1.5 bg-muted/20 border-border/30 hover:bg-muted/40 hover:border-border/50"
           >
-            <span className="truncate">{column.format || column.type || 'varchar'}</span>
+            <span className="truncate">
+              {column.format || column.type || 'varchar'}
+            </span>
             <ChevronsUpDown className="ml-1 h-2.5 w-2.5 shrink-0 opacity-50" />
           </Button>
         </PopoverTrigger>
-        <PopoverContent className="w-[200px] p-0 border-border/40 shadow-lg" align="end">
+        <PopoverContent
+          className="w-[200px] p-0 border-border/40 shadow-lg"
+          align="end"
+        >
           <Command className="bg-popover">
             <CommandInput
               placeholder="Search type..."
               className="h-8 text-xs font-mono border-0"
             />
-            <CommandEmpty className="py-2 text-xs text-muted-foreground text-center">No type found.</CommandEmpty>
+            <CommandEmpty className="py-2 text-xs text-muted-foreground text-center">
+              No type found.
+            </CommandEmpty>
             <CommandGroup className="max-h-[200px] overflow-auto p-1">
               {POSTGRES_TYPES.map((type) => (
                 <CommandItem
@@ -539,7 +572,9 @@ function ColumnRow({
                   <Check
                     className={cn(
                       'mr-2 h-3 w-3 text-primary',
-                      (column.format || column.type) === type ? 'opacity-100' : 'opacity-0'
+                      (column.format || column.type) === type
+                        ? 'opacity-100'
+                        : 'opacity-0',
                     )}
                   />
                   {type}
@@ -557,9 +592,13 @@ function ColumnRow({
           'h-6 w-7 flex items-center justify-center text-[10px] font-bold rounded border transition-all shrink-0',
           column.required
             ? 'bg-primary/10 text-primary border-primary/25'
-            : 'bg-muted/30 text-muted-foreground/60 border-border/30 hover:bg-muted/50 hover:border-border/50'
+            : 'bg-muted/30 text-muted-foreground/60 border-border/30 hover:bg-muted/50 hover:border-border/50',
         )}
-        title={column.required ? 'NOT NULL (click to allow NULL)' : 'Nullable (click to require)'}
+        title={
+          column.required
+            ? 'NOT NULL (click to allow NULL)'
+            : 'Nullable (click to require)'
+        }
       >
         {column.required ? 'NN' : 'N'}
       </button>

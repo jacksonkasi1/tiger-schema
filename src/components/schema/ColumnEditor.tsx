@@ -38,7 +38,7 @@ export function ColumnEditor({ tableId, columns }: ColumnEditorProps) {
     }),
     useSensor(KeyboardSensor, {
       coordinateGetter: sortableKeyboardCoordinates,
-    })
+    }),
   );
 
   const handleDragStart = (event: any) => {
@@ -53,7 +53,7 @@ export function ColumnEditor({ tableId, columns }: ColumnEditorProps) {
       const newIndex = parseInt(over.id as string);
 
       const reorderedColumns = arrayMove(columns, oldIndex, newIndex);
-      
+
       // Update all column positions
       reorderedColumns.forEach((col, index) => {
         updateColumn(tableId, index, col);
@@ -81,7 +81,7 @@ export function ColumnEditor({ tableId, columns }: ColumnEditorProps) {
       >
         {columns.map((column, index) => (
           <ColumnRow
-            key={`${column.title}-${index}`}
+            key={`${tableId}-col-${index}`}
             tableId={tableId}
             column={column}
             columnIndex={index}

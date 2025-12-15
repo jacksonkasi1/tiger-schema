@@ -4,7 +4,14 @@ import { useStore } from '@/lib/store';
 import { ColumnRow } from './ColumnRow';
 import { Column } from '@/lib/types';
 import { Button } from '@/components/ui/button';
-import { ChevronDown, ChevronRight, Focus, MoreVertical, Plus, Trash2 } from 'lucide-react';
+import {
+  ChevronDown,
+  ChevronRight,
+  Focus,
+  MoreVertical,
+  Plus,
+  Trash2,
+} from 'lucide-react';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -88,7 +95,10 @@ export function TableCard({ tableId }: TableCardProps) {
         </span>
 
         {/* Actions - visible on hover */}
-        <div className="opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-0.5" onClick={(e) => e.stopPropagation()}>
+        <div
+          className="opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-0.5"
+          onClick={(e) => e.stopPropagation()}
+        >
           <Button
             variant="ghost"
             size="sm"
@@ -145,7 +155,7 @@ export function TableCard({ tableId }: TableCardProps) {
           {table.columns && table.columns.length > 0 ? (
             table.columns.map((column, index) => (
               <ColumnRow
-                key={`${column.title}-${index}`}
+                key={`${tableId}-col-${index}`}
                 tableId={tableId}
                 column={column}
                 columnIndex={index}
@@ -165,7 +175,8 @@ export function TableCard({ tableId }: TableCardProps) {
           <AlertDialogHeader>
             <AlertDialogTitle>Delete Table</AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to delete &quot;{table.title}&quot;? This action cannot be undone.
+              Are you sure you want to delete &quot;{table.title}&quot;? This
+              action cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

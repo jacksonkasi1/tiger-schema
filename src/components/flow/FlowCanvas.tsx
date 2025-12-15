@@ -53,23 +53,19 @@ type CopiedSelection = {
   };
 };
 
-const cloneTable = (table: Table): Table =>
-  JSON.parse(JSON.stringify(table));
+const cloneTable = (table: Table): Table => JSON.parse(JSON.stringify(table));
 
 const buildCandidateKey = (
   schema: string | undefined,
   baseName: string,
-  attempt: number
+  attempt: number,
 ) => {
   const suffix = attempt === 1 ? '_copy' : `_copy_${attempt}`;
   const nameWithSuffix = `${baseName}${suffix}`;
   return schema ? `${schema}.${nameWithSuffix}` : nameWithSuffix;
 };
 
-const createUniqueTableKey = (
-  baseKey: string,
-  occupiedKeys: Set<string>
-) => {
+const createUniqueTableKey = (baseKey: string, occupiedKeys: Set<string>) => {
   const parts = baseKey.split('.');
   const schema = parts.length > 1 ? parts[0] : undefined;
   const baseName = parts.length > 1 ? parts.slice(1).join('.') : baseKey;
@@ -123,6 +119,7 @@ function FlowCanvasInner() {
   const {
     tables,
     updateTablePosition,
+    updateColumn,
     getEdgeRelationship,
     setEdgeRelationship,
     layoutTrigger,
@@ -150,7 +147,7 @@ function FlowCanvasInner() {
     isView?: boolean;
   } | null>(null);
   const [highlightedEdges, setHighlightedEdges] = useState<Set<string>>(
-    new Set()
+    new Set(),
   );
   const copiedSelectionRef = useRef<CopiedSelection | null>(null);
   const pasteOffsetRef = useRef(0);
@@ -163,7 +160,7 @@ function FlowCanvasInner() {
         return (saved as 'strict' | 'flexible') || 'strict';
       }
       return 'strict';
-    }
+    },
   );
 
   // Save connection mode to localStorage when it changes
@@ -173,7 +170,8 @@ function FlowCanvasInner() {
     }
   }, [connectionMode]);
 
-  const { fitView, zoomIn, zoomOut, getZoom, screenToFlowPosition } = useReactFlow();
+  const { fitView, zoomIn, zoomOut, getZoom, screenToFlowPosition } =
+    useReactFlow();
 
   // Use refs to avoid dependency on functions
   const reactFlowRef = useRef({ fitView, zoomIn, zoomOut, getZoom });
@@ -196,7 +194,7 @@ function FlowCanvasInner() {
         y: event.clientY,
       });
     },
-    [screenToFlowPosition]
+    [screenToFlowPosition],
   );
 
   // Track pending layout trigger to auto-trigger after nodes are set
@@ -237,7 +235,7 @@ function FlowCanvasInner() {
           }
           return acc;
         },
-        {} as typeof tables
+        {} as typeof tables,
       );
 
       const flowNodes = tablesToNodes(filteredTables);
@@ -247,47 +245,49 @@ function FlowCanvasInner() {
         id: node.id || `node-${index}`, // Fallback ID if missing
       }));
 
-      const flowEdges: FlowEdge[] = tablesToEdges(filteredTables).map((edge, index) => {
-        const relationshipType = getEdgeRelationship(edge.id);
+      const flowEdges: FlowEdge[] = tablesToEdges(filteredTables).map(
+        (edge, index) => {
+          const relationshipType = getEdgeRelationship(edge.id);
 
-        const markerEnd = {
-          type: MarkerType.ArrowClosed,
-          width: 20,
-          height: 20,
-          color: '#6B7280',
-        };
+          const markerEnd = {
+            type: MarkerType.ArrowClosed,
+            width: 20,
+            height: 20,
+            color: '#6B7280',
+          };
 
-        const markerStart =
-          relationshipType === 'many-to-many'
-            ? {
-                type: MarkerType.ArrowClosed,
-                width: 20,
-                height: 20,
-                color: '#6B7280',
-              }
-            : undefined;
+          const markerStart =
+            relationshipType === 'many-to-many'
+              ? {
+                  type: MarkerType.ArrowClosed,
+                  width: 20,
+                  height: 20,
+                  color: '#6B7280',
+                }
+              : undefined;
 
-        // Ensure edge.data exists and has required properties
-        if (!edge.data) {
-          throw new Error(`Edge ${edge.id} is missing data property`);
-        }
+          // Ensure edge.data exists and has required properties
+          if (!edge.data) {
+            throw new Error(`Edge ${edge.id} is missing data property`);
+          }
 
-        return {
-          ...edge,
-          id: edge.id || `edge-${index}`, // Ensure edge has ID
-          type: 'custom',
-          markerEnd,
-          markerStart,
-          data: {
-            sourceColumn: edge.data.sourceColumn,
-            targetColumn: edge.data.targetColumn,
-            relationshipType,
-          },
-        } as FlowEdge;
-      });
+          return {
+            ...edge,
+            id: edge.id || `edge-${index}`, // Ensure edge has ID
+            type: 'custom',
+            markerEnd,
+            markerStart,
+            data: {
+              sourceColumn: edge.data.sourceColumn,
+              targetColumn: edge.data.targetColumn,
+              relationshipType,
+            },
+          } as FlowEdge;
+        },
+      );
 
       console.log(
-        `[FlowCanvas] Setting ${nodesWithUniqueIds.length} nodes and ${flowEdges.length} edges`
+        `[FlowCanvas] Setting ${nodesWithUniqueIds.length} nodes and ${flowEdges.length} edges`,
       );
       setNodes(nodesWithUniqueIds);
       setEdges(flowEdges);
@@ -314,7 +314,7 @@ function FlowCanvasInner() {
             const layoutedNodes = getLayoutedNodesWithSchemas(
               nodesWithUniqueIds,
               flowEdges,
-              { direction: 'TB' }
+              { direction: 'TB' },
             );
             setNodes(layoutedNodes);
 
@@ -400,18 +400,12 @@ function FlowCanvasInner() {
       } else {
         // Nodes not ready yet, mark as pending
         console.log(
-          '[FlowCanvas] Layout triggered but nodes not ready, marking as pending'
+          '[FlowCanvas] Layout triggered but nodes not ready, marking as pending',
         );
         pendingLayoutRef.current = true;
       }
     }
-  }, [
-    layoutTrigger,
-    nodes,
-    edges,
-    setNodes,
-    updateTablePosition,
-  ]);
+  }, [layoutTrigger, nodes, edges, setNodes, updateTablePosition]);
 
   // Listen for fit view trigger from store
   useEffect(() => {
@@ -456,7 +450,7 @@ function FlowCanvasInner() {
         const zoom = reactFlowRef.current?.getZoom?.();
         if (zoom !== undefined) {
           window.dispatchEvent(
-            new CustomEvent('reactflow:zoom', { detail: { zoom } })
+            new CustomEvent('reactflow:zoom', { detail: { zoom } }),
           );
         }
       }, 250);
@@ -471,7 +465,7 @@ function FlowCanvasInner() {
         const zoom = reactFlowRef.current?.getZoom?.();
         if (zoom !== undefined) {
           window.dispatchEvent(
-            new CustomEvent('reactflow:zoom', { detail: { zoom } })
+            new CustomEvent('reactflow:zoom', { detail: { zoom } }),
           );
         }
       }, 250);
@@ -502,7 +496,7 @@ function FlowCanvasInner() {
     const zoom = reactFlowRef.current?.getZoom?.();
     if (zoom !== undefined) {
       window.dispatchEvent(
-        new CustomEvent('reactflow:zoom', { detail: { zoom } })
+        new CustomEvent('reactflow:zoom', { detail: { zoom } }),
       );
     }
   }, []); // Empty deps - only run once
@@ -512,7 +506,7 @@ function FlowCanvasInner() {
     const zoom = reactFlowRef.current?.getZoom?.();
     if (zoom !== undefined) {
       window.dispatchEvent(
-        new CustomEvent('reactflow:zoom', { detail: { zoom } })
+        new CustomEvent('reactflow:zoom', { detail: { zoom } }),
       );
     }
   }, []); // No deps - use ref
@@ -559,7 +553,7 @@ function FlowCanvasInner() {
     toast.success(
       `Copied ${copiedTables.length} table${
         copiedTables.length === 1 ? '' : 's'
-      }`
+      }`,
     );
     return true;
   }, []);
@@ -569,7 +563,7 @@ function FlowCanvasInner() {
     if (pasteInProgressRef.current) {
       return false;
     }
-    
+
     const payload = copiedSelectionRef.current;
 
     if (!payload || payload.tables.length === 0) {
@@ -648,15 +642,13 @@ function FlowCanvasInner() {
 
     state.addTables(newTables);
     const newCount = Object.keys(newTables).length;
-    toast.success(
-      `Pasted ${newCount} table${newCount === 1 ? '' : 's'}`
-    );
-    
+    toast.success(`Pasted ${newCount} table${newCount === 1 ? '' : 's'}`);
+
     // Reset paste flag after a short delay to prevent rapid duplicate pastes
     setTimeout(() => {
       pasteInProgressRef.current = false;
     }, 100);
-    
+
     return true;
   }, []);
 
@@ -675,7 +667,7 @@ function FlowCanvasInner() {
           nds.map((node) => ({
             ...node,
             selected: true,
-          }))
+          })),
         );
       }
 
@@ -719,8 +711,8 @@ function FlowCanvasInner() {
               eds.filter(
                 (edge) =>
                   !selectedNodeIds.includes(edge.source) &&
-                  !selectedNodeIds.includes(edge.target)
-              )
+                  !selectedNodeIds.includes(edge.target),
+              ),
             );
 
             return nds.filter((node) => !node.selected);
@@ -743,7 +735,7 @@ function FlowCanvasInner() {
           nds.map((node) => ({
             ...node,
             selected: false,
-          }))
+          })),
         );
         setSelectedEdge(null);
         setHighlightedEdges(new Set());
@@ -770,7 +762,7 @@ function FlowCanvasInner() {
     (_event: any, node: any) => {
       updateTablePosition(node.id, node.position.x, node.position.y);
     },
-    [updateTablePosition]
+    [updateTablePosition],
   );
 
   // Handle multiple nodes drag
@@ -780,9 +772,45 @@ function FlowCanvasInner() {
 
   const onConnect = useCallback(
     (params: Connection) => {
+      // Helper to parse handle ids: "<table>_<col>_<index>"
+      const parseHandle = (handleId?: string | null) => {
+        if (!handleId) return null;
+        const parts = handleId.split('_');
+        const idxPart = parts.pop();
+        const index = idxPart ? Number(idxPart) : NaN;
+        const col = parts.pop() ?? '';
+        const table = parts.join('_');
+        return { table, col, index };
+      };
+
+      try {
+        const src = parseHandle(params.sourceHandle as string | null);
+        const tgt = parseHandle(params.targetHandle as string | null);
+
+        if (
+          src &&
+          tgt &&
+          !Number.isNaN(src.index) &&
+          !Number.isNaN(tgt.index)
+        ) {
+          // Persist FK on the source column so tablesToEdges will regenerate this relationship
+          const fkValue = `${tgt.table}.${tgt.col}`;
+          updateColumn(src.table, src.index, { fk: fkValue });
+
+          toast.success('Relationship created', {
+            description: `${src.table}.${src.col} → ${tgt.table}.${tgt.col}`,
+            position: 'bottom-center',
+            duration: 2000,
+          });
+        }
+      } catch (err) {
+        console.error('Failed to persist FK on connect:', err);
+      }
+
+      // Still add the visual edge immediately for instant feedback
       setEdges((eds) => addEdge(params, eds));
     },
-    [setEdges]
+    [setEdges, updateColumn],
   );
 
   // Validate connections based on connection mode
@@ -811,7 +839,7 @@ function FlowCanvasInner() {
         (_col: any, index: number) => {
           const handleId = `${sourceNode.id}_${_col.title}_${index}`;
           return handleId === sourceHandleId;
-        }
+        },
       );
 
       const isForeignKey = sourceColumn?.fk !== undefined;
@@ -827,19 +855,19 @@ function FlowCanvasInner() {
 
       return isForeignKey;
     },
-    [connectionMode, nodes]
+    [connectionMode, nodes],
   );
 
   const onNodeClick = useCallback(
     (_event: any, node: any) => {
       const connectedEdges = edges.filter(
-        (edge) => edge.source === node.id || edge.target === node.id
+        (edge) => edge.source === node.id || edge.target === node.id,
       );
       setHighlightedEdges(new Set(connectedEdges.map((e) => e.id)));
       // Expand table in sidebar when clicked on canvas
       expandTable(node.id);
     },
-    [edges, expandTable]
+    [edges, expandTable],
   );
 
   const onPaneClick = useCallback(() => {
@@ -860,7 +888,7 @@ function FlowCanvasInner() {
         isView,
       });
     },
-    []
+    [],
   );
 
   const onEdgeContextMenu = useCallback(
@@ -873,7 +901,7 @@ function FlowCanvasInner() {
         edgeId: edge.id,
       });
     },
-    []
+    [],
   );
 
   const onEdgeClick = useCallback(
@@ -889,7 +917,34 @@ function FlowCanvasInner() {
         },
       });
     },
-    [getEdgeRelationship]
+    [getEdgeRelationship],
+  );
+
+  // Helper to remove FK from source column when deleting an edge
+  const removeFkFromEdge = useCallback(
+    (edgeId: string) => {
+      // Edge ID format: "sourceTable.sourceColumn-targetTable.targetColumn"
+      const edgeParts = edgeId.split('-');
+      if (edgeParts.length === 2) {
+        const [sourceInfo] = edgeParts;
+        const sourceParts = sourceInfo.split('.');
+        if (sourceParts.length >= 2) {
+          const sourceColumn = sourceParts[sourceParts.length - 1];
+          const sourceTable = sourceParts.slice(0, -1).join('.');
+
+          const table = tables[sourceTable];
+          if (table?.columns) {
+            const columnIndex = table.columns.findIndex(
+              (col) => col.title === sourceColumn,
+            );
+            if (columnIndex >= 0) {
+              updateColumn(sourceTable, columnIndex, { fk: undefined });
+            }
+          }
+        }
+      }
+    },
+    [tables, updateColumn],
   );
 
   const handleRelationshipChange = useCallback(
@@ -915,29 +970,37 @@ function FlowCanvasInner() {
                     relationshipType: type,
                   },
                 }
-              : edge
-          )
+              : edge,
+          ),
         );
       }
     },
-    [selectedEdge, setEdgeRelationship, setEdges]
+    [selectedEdge, setEdgeRelationship, setEdges],
   );
 
   const handleEdgeDelete = useCallback(() => {
     if (selectedEdge) {
+      // Remove FK from source column to persist the deletion
+      removeFkFromEdge(selectedEdge.id);
+
       setEdges((eds) => eds.filter((edge) => edge.id !== selectedEdge.id));
       setSelectedEdge(null);
+
+      toast.success('Relationship deleted', {
+        position: 'bottom-center',
+        duration: 2000,
+      });
     }
-  }, [selectedEdge, setEdges]);
+  }, [selectedEdge, setEdges, removeFkFromEdge]);
 
   const handleNodeDelete = useCallback(
     (nodeId: string) => {
       setNodes((nds) => nds.filter((node) => node.id !== nodeId));
       setEdges((eds) =>
-        eds.filter((edge) => edge.source !== nodeId && edge.target !== nodeId)
+        eds.filter((edge) => edge.source !== nodeId && edge.target !== nodeId),
       );
     },
-    [setNodes, setEdges]
+    [setNodes, setEdges],
   );
 
   const handleCopyNodeId = useCallback((nodeId: string) => {
@@ -957,25 +1020,33 @@ function FlowCanvasInner() {
         });
       }
     },
-    [nodes]
+    [nodes],
   );
 
   const handleHideNode = useCallback(
     (nodeId: string) => {
       setNodes((nds) =>
         nds.map((node) =>
-          node.id === nodeId ? { ...node, hidden: true } : node
-        )
+          node.id === nodeId ? { ...node, hidden: true } : node,
+        ),
       );
     },
-    [setNodes]
+    [setNodes],
   );
 
   const handleEdgeDeleteFromMenu = useCallback(
     (edgeId: string) => {
+      // Remove FK from source column to persist the deletion
+      removeFkFromEdge(edgeId);
+
       setEdges((eds) => eds.filter((edge) => edge.id !== edgeId));
+
+      toast.success('Relationship deleted', {
+        position: 'bottom-center',
+        duration: 2000,
+      });
     },
-    [setEdges]
+    [setEdges, removeFkFromEdge],
   );
 
   const handleChangeEdgeType = useCallback(
@@ -993,7 +1064,7 @@ function FlowCanvasInner() {
       }
       setContextMenu(null);
     },
-    [edges, getEdgeRelationship, contextMenu]
+    [edges, getEdgeRelationship, contextMenu],
   );
 
   // Apply highlighting to edges (memoized)
@@ -1066,7 +1137,7 @@ function FlowCanvasInner() {
             () => handleNodeDelete(contextMenu.nodeId!),
             () => handleCopyNodeId(contextMenu.nodeId!),
             () => handleFocusNode(contextMenu.nodeId!),
-            () => handleHideNode(contextMenu.nodeId!)
+            () => handleHideNode(contextMenu.nodeId!),
           )}
           onClose={() => setContextMenu(null)}
         />
@@ -1079,7 +1150,7 @@ function FlowCanvasInner() {
           items={createEdgeContextMenu(
             contextMenu.edgeId,
             () => handleEdgeDeleteFromMenu(contextMenu.edgeId!),
-            () => handleChangeEdgeType(contextMenu.edgeId!)
+            () => handleChangeEdgeType(contextMenu.edgeId!),
           )}
           onClose={() => setContextMenu(null)}
         />
