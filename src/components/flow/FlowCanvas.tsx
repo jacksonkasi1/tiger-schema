@@ -152,6 +152,9 @@ function FlowCanvasInner() {
   const copiedSelectionRef = useRef<CopiedSelection | null>(null);
   const pasteOffsetRef = useRef(0);
 
+  // Track manually deleted edges to prevent auto-restore
+  const deletedEdgesRef = useRef<Set<string>>(new Set());
+
   // Connection mode with localStorage persistence
   const [connectionMode, _setConnectionMode] = useState<'strict' | 'flexible'>(
     () => {
@@ -245,8 +248,9 @@ function FlowCanvasInner() {
         id: node.id || `node-${index}`, // Fallback ID if missing
       }));
 
-      const flowEdges: FlowEdge[] = tablesToEdges(filteredTables).map(
-        (edge, index) => {
+      const flowEdges: FlowEdge[] = tablesToEdges(filteredTables)
+        .filter((edge) => !deletedEdgesRef.current.has(edge.id))
+        .map((edge, index) => {
           const relationshipType = getEdgeRelationship(edge.id);
 
           const markerEnd = {
@@ -283,8 +287,7 @@ function FlowCanvasInner() {
               relationshipType,
             },
           } as FlowEdge;
-        },
-      );
+        });
 
       console.log(
         `[FlowCanvas] Setting ${nodesWithUniqueIds.length} nodes and ${flowEdges.length} edges`,
@@ -993,6 +996,25 @@ function FlowCanvasInner() {
     }
   }, [selectedEdge, setEdges, removeFkFromEdge]);
 
+  const onEdgesDelete = useCallback(
+    (edges: Edge[]) => {
+      let deletedCount = 0;
+      edges.forEach((edge) => {
+        removeFkFromEdge(edge.id);
+        deletedEdgesRef.current.add(edge.id);
+        deletedCount++;
+      });
+
+      if (deletedCount > 0) {
+        toast.success(`Relationship${deletedCount > 1 ? 's' : ''} deleted`, {
+          position: 'bottom-center',
+          duration: 2000,
+        });
+      }
+    },
+    [removeFkFromEdge],
+  );
+
   const handleNodeDelete = useCallback(
     (nodeId: string) => {
       setNodes((nds) => nds.filter((node) => node.id !== nodeId));
@@ -1089,6 +1111,7 @@ function FlowCanvasInner() {
         onEdgesChange={onEdgesChange}
         onNodeDragStop={onNodeDragStop}
         onNodesDelete={onNodesDelete}
+        onEdgesDelete={onEdgesDelete}
         onConnect={onConnect}
         isValidConnection={isValidConnection}
         onNodeClick={onNodeClick}
