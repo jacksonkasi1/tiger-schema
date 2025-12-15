@@ -1,6 +1,7 @@
 'use client';
 
 import { create } from 'zustand';
+import { getRandomColor } from './utils';
 import {
   TableState,
   Column,
@@ -383,6 +384,7 @@ export const useStore = create<AppState>((set, get) => {
             ? currentTables[key].position
             : { x: 0, y: 0 },
           schema,
+          color: currentTables[key]?.color || getRandomColor(),
         };
       }
 
@@ -433,6 +435,7 @@ export const useStore = create<AppState>((set, get) => {
             columns,
             position: existing?.position ??
               tableValue.position ?? { x: 0, y: 0 },
+            color: existing?.color || getRandomColor(),
           };
         }
 
@@ -569,6 +572,7 @@ export const useStore = create<AppState>((set, get) => {
             },
           ],
           position: { x: 0, y: 0 },
+          color: getRandomColor(),
         },
       };
 
