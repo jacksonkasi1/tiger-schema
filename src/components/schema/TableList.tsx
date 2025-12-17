@@ -63,14 +63,14 @@ export function TableList() {
   return (
     <div className="flex flex-col h-full">
       {/* Search */}
-      <div className="px-4 py-3 border-b border-border/50">
+      <div className="px-4 py-4 border-b border-border/40">
         <div className="relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground/50 pointer-events-none" />
           <Input
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Search tables..."
-            className="h-9 pl-9 text-sm"
+            className="h-9 pl-10 text-sm bg-muted/30 border-border/40 hover:border-border/60 focus-visible:border-primary/50"
             autoFocus
           />
         </div>
@@ -78,7 +78,7 @@ export function TableList() {
 
       {/* Tables List */}
       <ScrollArea className="flex-1">
-        <div className="py-2">
+        <div className="py-1">
           {filteredTableIds.length > 0 ? (
             <DndContext
               sensors={sensors}
@@ -95,7 +95,7 @@ export function TableList() {
               </SortableContext>
             </DndContext>
           ) : (
-            <div className="text-center py-12 px-4 text-sm text-muted-foreground">
+            <div className="text-center py-16 px-4 text-sm text-muted-foreground/60">
               {searchQuery ? 'No tables found' : 'No tables in schema'}
             </div>
           )}
@@ -103,8 +103,8 @@ export function TableList() {
       </ScrollArea>
 
       {/* Add Table Button */}
-      <div className="px-4 py-3 border-t border-border/50">
-        <Button className="w-full" size="sm" onClick={handleAddTable}>
+      <div className="px-4 py-4 border-t border-border/40">
+        <Button className="w-full h-9" size="sm" onClick={handleAddTable}>
           <Plus className="h-4 w-4 mr-2" />
           Add Table
         </Button>

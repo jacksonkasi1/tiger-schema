@@ -8,7 +8,6 @@ import { Input } from '@/components/ui/input';
 import {
   Collapsible,
   CollapsibleContent,
-  CollapsibleTrigger,
 } from '@/components/ui/collapsible';
 import {
   DropdownMenu,
@@ -34,8 +33,6 @@ import {
 } from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
 import {
-  ChevronDown,
-  ChevronRight,
   MoreVertical,
   GripVertical,
   Plus,
@@ -130,17 +127,17 @@ export function TableItem({ tableId }: TableItemProps) {
       <div
         ref={setNodeRef}
         style={style}
-        className={cn('group transition-colors', isDragging && 'opacity-50')}
+        className={cn('group transition-all duration-150 ease-out', isDragging && 'opacity-50')}
       >
         <Collapsible
           open={isExpanded}
           onOpenChange={() => toggleTableExpanded(tableId)}
         >
           <div
-            className="flex items-center gap-2 px-3 py-2 hover:bg-muted/40 transition-colors border-l-[3px] border-transparent hover:border-primary/40"
+            className="flex items-center gap-2.5 px-3 py-2.5 hover:bg-muted/30 transition-all duration-150 ease-out border-l-[3px] border-transparent hover:border-primary/30"
             style={{
               backgroundColor: isExpanded
-                ? `${table.color || getTableHeaderColor(table.title)}10`
+                ? `${table.color || getTableHeaderColor(table.title)}08`
                 : undefined,
             }}
           >
@@ -148,31 +145,20 @@ export function TableItem({ tableId }: TableItemProps) {
             <button
               {...attributes}
               {...listeners}
-              className="cursor-grab active:cursor-grabbing shrink-0 text-muted-foreground hover:text-foreground transition-colors"
+              className="cursor-grab active:cursor-grabbing shrink-0 text-muted-foreground/40 hover:text-muted-foreground transition-colors duration-150"
             >
               <GripVertical className="h-4 w-4" />
             </button>
-
-            {/* Expand Icon */}
-            <CollapsibleTrigger asChild>
-              <button className="shrink-0 hover:bg-accent rounded p-0.5 transition-colors">
-                {isExpanded ? (
-                  <ChevronDown className="h-4 w-4 text-muted-foreground" />
-                ) : (
-                  <ChevronRight className="h-4 w-4 text-muted-foreground" />
-                )}
-              </button>
-            </CollapsibleTrigger>
 
             {/* Color Indicator */}
             <Popover open={showColorPicker} onOpenChange={setShowColorPicker}>
               <PopoverTrigger asChild>
                 <button
-                  className="shrink-0 hover:scale-110 transition-transform"
+                  className="shrink-0 hover:scale-110 transition-all duration-150 rounded-sm"
                   title="Change color"
                 >
                   <div
-                    className="w-3 h-3 rounded-sm border border-border/50"
+                    className="w-3 h-3 rounded-sm border border-border/40 shadow-sm"
                     style={{
                       backgroundColor:
                         table.color || getTableHeaderColor(table.title),
@@ -180,17 +166,17 @@ export function TableItem({ tableId }: TableItemProps) {
                   />
                 </button>
               </PopoverTrigger>
-              <PopoverContent className="w-auto p-3" align="start">
-                <div className="space-y-2">
-                  <p className="text-xs font-medium">Table Color</p>
-                  <div className="grid grid-cols-5 gap-2">
+              <PopoverContent className="w-auto p-4 border-border/60" align="start">
+                <div className="space-y-3">
+                  <p className="text-xs font-medium text-muted-foreground">Table Color</p>
+                  <div className="grid grid-cols-5 gap-2.5">
                     {TABLE_COLORS.map((color) => (
                       <button
                         key={color}
                         className={cn(
-                          'h-8 w-8 rounded-md transition-all hover:scale-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring relative',
+                          'h-8 w-8 rounded-lg transition-all duration-150 hover:scale-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/30 relative shadow-sm',
                           table.color === color &&
-                            'ring-2 ring-offset-2 ring-offset-background',
+                            'ring-2 ring-offset-2 ring-offset-background ring-primary/50',
                         )}
                         style={{ backgroundColor: color }}
                         onClick={() => {
@@ -231,13 +217,13 @@ export function TableItem({ tableId }: TableItemProps) {
                     setIsRenaming(false);
                   }
                 }}
-                className="flex-1 h-7 text-sm px-2"
+                className="flex-1 h-8 text-sm px-2.5 border-border/60"
                 autoFocus
                 onClick={(e) => e.stopPropagation()}
               />
             ) : (
               <span
-                className="flex-1 text-sm font-medium text-foreground truncate cursor-pointer"
+                className="flex-1 text-sm font-medium text-foreground truncate cursor-pointer hover:text-foreground/80 transition-colors duration-150"
                 onClick={() => toggleTableExpanded(tableId)}
               >
                 {table.title}
@@ -247,18 +233,18 @@ export function TableItem({ tableId }: TableItemProps) {
             {/* 3) Column Count Badge - Always Visible */}
             <Badge
               variant="secondary"
-              className="text-[10px] px-1.5 py-0 h-5 shrink-0 font-normal"
+              className="text-[10px] px-2 py-0.5 h-5 shrink-0 font-normal bg-muted/60 text-muted-foreground border-0"
             >
               {table.columns?.length || 0}
             </Badge>
 
             {/* Right Icon Group: 4) Rename, 5) Focus, 6) More Actions */}
-            <div className="flex items-center gap-1 shrink-0">
+            <div className="flex items-center gap-0.5 shrink-0">
               {/* 4) Rename Icon (Pencil) */}
               <Button
                 variant="ghost"
                 size="icon"
-                className="h-6 w-6"
+                className="h-6 w-6 opacity-40 hover:opacity-100 transition-all duration-150 hover:bg-muted/60"
                 onClick={(e) => {
                   e.stopPropagation();
                   setRenameValue(table.title);
@@ -266,21 +252,21 @@ export function TableItem({ tableId }: TableItemProps) {
                 }}
                 title="Rename table"
               >
-                <Pencil className="h-3.5 w-3.5" />
+                <Pencil className="h-3 w-3" />
               </Button>
 
               {/* 5) Focus/Zoom Icon */}
               <Button
                 variant="ghost"
                 size="icon"
-                className="h-6 w-6"
+                className="h-6 w-6 opacity-40 hover:opacity-100 transition-all duration-150 hover:bg-muted/60"
                 onClick={(e) => {
                   e.stopPropagation();
                   handleFocusTable();
                 }}
                 title="Focus table"
               >
-                <Maximize2 className="h-3.5 w-3.5" />
+                <Maximize2 className="h-3 w-3" />
               </Button>
 
               {/* 6) 3-Dots Menu - Last Element */}
@@ -289,42 +275,43 @@ export function TableItem({ tableId }: TableItemProps) {
                   <Button
                     variant="ghost"
                     size="icon"
-                    className="h-6 w-6"
+                    className="h-6 w-6 opacity-40 hover:opacity-100 transition-all duration-150 hover:bg-muted/60"
                     onClick={(e) => e.stopPropagation()}
                     title="More actions"
                   >
-                    <MoreVertical className="h-3.5 w-3.5" />
+                    <MoreVertical className="h-3 w-3" />
                   </Button>
                 </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
+                <DropdownMenuContent align="end" className="w-48 p-1.5">
                   <DropdownMenuItem
                     onClick={() => {
                       setRenameValue(table.title);
                       setIsRenaming(true);
                     }}
+                    className="py-2 px-2 rounded-md"
                   >
-                    <Pencil className="mr-2 h-3.5 w-3.5" />
+                    <Pencil className="mr-2.5 h-4 w-4" />
                     Rename table
                   </DropdownMenuItem>
-                  <DropdownMenuItem onClick={handleFocusTable}>
-                    <Focus className="mr-2 h-3.5 w-3.5" />
+                  <DropdownMenuItem onClick={handleFocusTable} className="py-2 px-2 rounded-md">
+                    <Focus className="mr-2.5 h-4 w-4" />
                     Focus in canvas
                   </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => setShowColorPicker(true)}>
-                    <Palette className="mr-2 h-3.5 w-3.5" />
+                  <DropdownMenuItem onClick={() => setShowColorPicker(true)} className="py-2 px-2 rounded-md">
+                    <Palette className="mr-2.5 h-4 w-4" />
                     Change color
                   </DropdownMenuItem>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem>
-                    <Copy className="mr-2 h-3.5 w-3.5" />
+                  <DropdownMenuSeparator className="my-1.5" />
+                  <DropdownMenuItem className="py-2 px-2 rounded-md">
+                    <Copy className="mr-2.5 h-4 w-4" />
                     Duplicate table
                   </DropdownMenuItem>
-                  <DropdownMenuSeparator />
+                  <DropdownMenuSeparator className="my-1.5" />
                   <DropdownMenuItem
                     onClick={() => setShowDeleteDialog(true)}
-                    className="text-destructive"
+                    className="text-destructive py-2 px-2 rounded-md focus:text-destructive focus:bg-destructive/10"
                   >
-                    <Trash2 className="mr-2 h-3.5 w-3.5" />
+                    <Trash2 className="mr-2.5 h-4 w-4" />
                     Delete table
                   </DropdownMenuItem>
                 </DropdownMenuContent>
@@ -334,31 +321,31 @@ export function TableItem({ tableId }: TableItemProps) {
 
           <CollapsibleContent>
             <div
-              className="border-t border-border/20"
+              className="border-t border-border/30"
               style={{
-                backgroundColor: `${table.color || getTableHeaderColor(table.title)}05`,
+                backgroundColor: `${table.color || getTableHeaderColor(table.title)}03`,
               }}
             >
               {/* Columns List */}
-              <div className="py-1">
+              <div className="py-1.5">
                 {table.columns && table.columns.length > 0 ? (
                   <ColumnEditor tableId={tableId} columns={table.columns} />
                 ) : (
-                  <div className="text-center py-6 text-xs text-muted-foreground">
-                    No columns
+                  <div className="text-center py-8 text-xs text-muted-foreground/60">
+                    No columns yet
                   </div>
                 )}
               </div>
 
               {/* Add Column Button */}
-              <div className="px-3 pb-2 pt-1">
+              <div className="px-3 pb-3 pt-1">
                 <Button
                   variant="outline"
                   size="sm"
-                  className="w-full h-8 text-xs"
+                  className="w-full h-8 text-xs border-dashed border-border/50 hover:border-border/80 hover:bg-muted/30 transition-all duration-150"
                   onClick={handleAddColumn}
                 >
-                  <Plus className="h-3 w-3 mr-1.5" />
+                  <Plus className="h-3.5 w-3.5 mr-2" />
                   Add Column
                 </Button>
               </div>
