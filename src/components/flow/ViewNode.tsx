@@ -28,12 +28,14 @@ function ViewNodeComponent({ data, selected, id }: NodeProps) {
     <TooltipProvider delayDuration={150}>
       <div
         className={cn(
-          'rounded-md overflow-hidden',
+          'rounded-md overflow-visible',
           'bg-purple-50 dark:bg-purple-950',
           'backdrop-blur-sm',
-          'border-2 border-purple-200 dark:border-purple-800 transition-colors',
-          'shadow-md',
-          selected && 'border-purple-500 ring-2 ring-purple-500/20'
+          'border transition-colors',
+          'shadow-sm',
+          selected
+            ? 'border-blue-400 dark:border-blue-500'
+            : 'border-purple-200 dark:border-purple-800'
         )}
         style={{
           minWidth: '200px',
@@ -41,7 +43,7 @@ function ViewNodeComponent({ data, selected, id }: NodeProps) {
         }}
       >
         {/* View Header */}
-        <div className="py-2 pb-3 px-2 text-purple-700 dark:text-purple-300 bg-purple-100 dark:bg-purple-900 font-medium text-lg text-center border-b-2 border-purple-200 dark:border-purple-800 flex items-center justify-center">
+        <div className="py-2 pb-3 px-2 text-purple-700 dark:text-purple-300 bg-purple-100 dark:bg-purple-900 font-medium text-lg text-center border-b-2 border-purple-200 dark:border-purple-800 flex items-center justify-center rounded-t-md">
           <Newspaper className="mr-2" size={20} />
           <span>{viewData.title}</span>
         </div>
@@ -62,23 +64,27 @@ function ViewNodeComponent({ data, selected, id }: NodeProps) {
 
             return (
               <div key={handleId} className="relative group">
-                {col.fk && (
-                  <Handle
-                    type="source"
-                    position={Position.Right}
-                    id={handleId}
-                    className="!w-3 !h-3 !bg-purple-500 !border-2 !border-white dark:!border-purple-900"
-                    style={{ top: '50%', transform: 'translateY(-50%)' }}
-                  />
-                )}
-
+                {/* Left Handle - Target */}
                 <Handle
                   type="target"
                   position={Position.Left}
                   id={handleId}
                   className={cn(
-                    '!w-3 !h-3 !border-2 !border-white dark:!border-purple-900',
-                    col.pk ? '!bg-purple-600' : '!bg-purple-300'
+                    '!w-3 !h-3 !bg-blue-500 !border-2 !border-white dark:!border-purple-900 !-left-[9px] !transition-opacity',
+                    selected ? '!opacity-100' : '!opacity-0'
+                  )}
+                  style={{ top: '50%', transform: 'translateY(-50%)' }}
+                />
+
+                {/* Right Handle - Source */}
+                <Handle
+                  type="source"
+                  position={Position.Right}
+                  id={handleId}
+                  className={cn(
+                    '!w-3 !h-3 !border-2 !border-white dark:!border-purple-900 !-right-[7px] !transition-opacity',
+                    col.fk ? '!bg-emerald-500' : '!bg-blue-500',
+                    selected ? '!opacity-100' : '!opacity-0'
                   )}
                   style={{ top: '50%', transform: 'translateY(-50%)' }}
                 />

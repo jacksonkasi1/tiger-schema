@@ -16,11 +16,13 @@ function TableNodeComponent({ data, selected, id }: NodeProps) {
     <TooltipProvider delayDuration={150}>
       <div
         className={cn(
-          'rounded-md overflow-hidden',
+          'rounded-md overflow-visible',
           'bg-white dark:bg-dark-700',
-          'border-2 dark:border-dark-border transition-colors',
-          'shadow-md',
-          selected && 'border-green-500 ring-2 ring-green-500/20'
+          'border transition-colors',
+          'shadow-sm',
+          selected
+            ? 'border-blue-400 dark:border-blue-500'
+            : 'border-gray-200 dark:border-dark-border',
         )}
         style={{
           minWidth: '200px',
@@ -28,7 +30,7 @@ function TableNodeComponent({ data, selected, id }: NodeProps) {
       >
         {/* Table Header */}
         <div
-          className="py-2 pb-3 px-2 text-dark-200 dark:text-light-500 bg-gray-50 dark:bg-dark-800 font-medium text-lg text-center border-b-2 dark:border-dark-border"
+          className="py-2 pb-3 px-2 text-dark-200 dark:text-light-500 bg-gray-50 dark:bg-dark-800 font-medium text-lg text-center border-b-2 dark:border-dark-border rounded-t-md"
           style={{ borderTopWidth: '4px', borderTopColor: headerColor, borderTopStyle: 'solid' }}
         >
           {tableData.is_view && <Newspaper className="inline mb-1px mr-2" size={20} />}
@@ -48,23 +50,27 @@ function TableNodeComponent({ data, selected, id }: NodeProps) {
 
             return (
               <div key={handleId} className="relative group">
-                {col.fk && (
-                  <Handle
-                    type="source"
-                    position={Position.Right}
-                    id={handleId}
-                    className="!w-3 !h-3 !bg-green-500 !border-2 !border-white dark:!border-dark-700"
-                    style={{ top: '50%', transform: 'translateY(-50%)' }}
-                  />
-                )}
-
+                {/* Left Handle - Target (for incoming connections) */}
                 <Handle
                   type="target"
                   position={Position.Left}
                   id={handleId}
                   className={cn(
-                    '!w-3 !h-3 !border-2 !border-white dark:!border-dark-700',
-                    col.pk ? '!bg-blue-500' : '!bg-gray-400'
+                    '!w-3 !h-3 !bg-blue-500 !border-2 !border-white dark:!border-dark-700 !-left-[9px] !transition-opacity',
+                    selected ? '!opacity-100' : '!opacity-0'
+                  )}
+                  style={{ top: '50%', transform: 'translateY(-50%)' }}
+                />
+
+                {/* Right Handle - Source (for outgoing connections) */}
+                <Handle
+                  type="source"
+                  position={Position.Right}
+                  id={handleId}
+                  className={cn(
+                    '!w-3 !h-3 !border-2 !border-white dark:!border-dark-700 !-right-[7px] !transition-opacity',
+                    col.fk ? '!bg-emerald-500' : '!bg-blue-500',
+                    selected ? '!opacity-100' : '!opacity-0'
                   )}
                   style={{ top: '50%', transform: 'translateY(-50%)' }}
                 />
