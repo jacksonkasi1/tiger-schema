@@ -31,6 +31,7 @@ import { MarkerType } from '@xyflow/react';
 import { toast } from 'sonner';
 import { Lock, Unlock } from 'lucide-react';
 import { Table, TableState } from '@/lib/types';
+import { cn } from '@/lib/utils';
 
 const nodeTypes = {
   table: ModernTableNode,
@@ -155,6 +156,9 @@ function FlowCanvasInner() {
 
   // Track manually deleted edges to prevent auto-restore
   const deletedEdgesRef = useRef<Set<string>>(new Set());
+
+  // Track when connection is being dragged to show handles on all nodes
+  const [isConnecting, setIsConnecting] = useState(false);
 
   // Connection mode with localStorage persistence
   const [connectionMode, setConnectionMode] = useState<'strict' | 'flexible'>(
@@ -774,6 +778,16 @@ function FlowCanvasInner() {
     console.log('Nodes deleted:', deleted);
   }, []);
 
+  // Track connection start to show handles on all nodes
+  const onConnectStart = useCallback(() => {
+    setIsConnecting(true);
+  }, []);
+
+  // Track connection end to hide handles
+  const onConnectEnd = useCallback(() => {
+    setIsConnecting(false);
+  }, []);
+
   const onConnect = useCallback(
     (params: Connection) => {
       console.log('[onConnect] Connection attempt:', {
@@ -1175,7 +1189,7 @@ function FlowCanvasInner() {
 
   return (
     <div
-      className="w-full h-screen"
+      className={cn('w-full h-screen', isConnecting && 'connecting')}
       ref={flowWrapperRef}
       onMouseMove={updateCursorPosition}
     >
@@ -1188,6 +1202,8 @@ function FlowCanvasInner() {
         onNodesDelete={onNodesDelete}
         onEdgesDelete={onEdgesDelete}
         onConnect={onConnect}
+        onConnectStart={onConnectStart}
+        onConnectEnd={onConnectEnd}
         isValidConnection={isValidConnection}
         onNodeClick={onNodeClick}
         onEdgeClick={onEdgeClick}
