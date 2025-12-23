@@ -811,29 +811,50 @@ function FlowCanvasInner() {
         return;
       }
 
-      // Validate in strict mode
+      // Validate in strict mode - check type compatibility
       if (connectionMode === 'strict') {
         const sourceNode = nodes.find((n) => n.id === params.source);
-        if (sourceNode) {
+        const targetNode = nodes.find((n) => n.id === params.target);
+        if (sourceNode && targetNode) {
           const sourceHandleId = params.sourceHandle;
-          if (sourceHandleId) {
+          const targetHandleId = params.targetHandle;
+          if (sourceHandleId && targetHandleId) {
             const sourceColumn = sourceNode.data.columns?.find(
               (_col: any, index: number) => {
                 const handleId = `${sourceNode.id}_${_col.title}_${index}`;
                 return handleId === sourceHandleId;
               },
             );
+            const targetColumn = targetNode.data.columns?.find(
+              (_col: any, index: number) => {
+                const handleId = `${targetNode.id}_${_col.title}_${index}`;
+                return handleId === targetHandleId;
+              },
+            );
 
-            const isForeignKey = sourceColumn?.fk !== undefined;
+            // In strict mode, validate type compatibility
+            const sourceType = sourceColumn?.type?.toLowerCase() || '';
+            const targetType = targetColumn?.type?.toLowerCase() || '';
+
+            // Check if types are compatible (same type, or both are id-like types)
+            const isTypeCompatible =
+              sourceType === targetType ||
+              (sourceType.includes('uuid') && targetType.includes('uuid')) ||
+              (sourceType.includes('int') && targetType.includes('int')) ||
+              (sourceType.includes('serial') && targetType.includes('int')) ||
+              (sourceType.includes('int') && targetType.includes('serial'));
+
             console.log('[onConnect] Strict mode check:', {
               sourceColumn: sourceColumn?.title,
-              isForeignKey,
+              targetColumn: targetColumn?.title,
+              sourceType,
+              targetType,
+              isTypeCompatible,
             });
 
-            if (!isForeignKey) {
-              toast.error('Only foreign keys can create connections', {
-                description:
-                  'In strict mode, only FK columns (green handles) can start connections',
+            if (!isTypeCompatible) {
+              toast.error('Type mismatch', {
+                description: `In strict mode, column types must be compatible. ${sourceType} cannot reference ${targetType}`,
                 position: 'bottom-center',
                 duration: 2500,
               });
@@ -931,12 +952,14 @@ function FlowCanvasInner() {
         return true;
       }
 
-      // In strict mode, only FK columns can start connections
+      // In strict mode, validate type compatibility between source and target columns
       const sourceNode = nodes.find((n) => n.id === connection.source);
-      if (!sourceNode) return false;
+      const targetNode = nodes.find((n) => n.id === connection.target);
+      if (!sourceNode || !targetNode) return false;
 
       const sourceHandleId = connection.sourceHandle;
-      if (!sourceHandleId) return false;
+      const targetHandleId = connection.targetHandle;
+      if (!sourceHandleId || !targetHandleId) return false;
 
       const sourceColumn = sourceNode.data.columns?.find(
         (_col: any, index: number) => {
@@ -944,8 +967,28 @@ function FlowCanvasInner() {
           return handleId === sourceHandleId;
         },
       );
+      const targetColumn = targetNode.data.columns?.find(
+        (_col: any, index: number) => {
+          const handleId = `${targetNode.id}_${_col.title}_${index}`;
+          return handleId === targetHandleId;
+        },
+      );
 
-      return sourceColumn?.fk !== undefined;
+      if (!sourceColumn || !targetColumn) return false;
+
+      // Check type compatibility
+      const sourceType = sourceColumn.type?.toLowerCase() || '';
+      const targetType = targetColumn.type?.toLowerCase() || '';
+
+      // Types are compatible if they match or are both id-like types
+      const isTypeCompatible =
+        sourceType === targetType ||
+        (sourceType.includes('uuid') && targetType.includes('uuid')) ||
+        (sourceType.includes('int') && targetType.includes('int')) ||
+        (sourceType.includes('serial') && targetType.includes('int')) ||
+        (sourceType.includes('int') && targetType.includes('serial'));
+
+      return isTypeCompatible;
     },
     [connectionMode, nodes],
   );
