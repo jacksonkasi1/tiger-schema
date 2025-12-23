@@ -264,11 +264,11 @@ function FlowCanvasInner() {
           const markerStart =
             relationshipType === 'many-to-many'
               ? {
-                type: MarkerType.ArrowClosed,
-                width: 20,
-                height: 20,
-                color: '#6B7280',
-              }
+                  type: MarkerType.ArrowClosed,
+                  width: 20,
+                  height: 20,
+                  color: '#6B7280',
+                }
               : undefined;
 
           // Ensure edge.data exists and has required properties
@@ -555,7 +555,8 @@ function FlowCanvasInner() {
     copiedSelectionRef.current = { tables: copiedTables, center };
     pasteOffsetRef.current = 0;
     toast.success(
-      `Copied ${copiedTables.length} table${copiedTables.length === 1 ? '' : 's'
+      `Copied ${copiedTables.length} table${
+        copiedTables.length === 1 ? '' : 's'
       }`,
     );
     return true;
@@ -775,20 +776,97 @@ function FlowCanvasInner() {
 
   const onConnect = useCallback(
     (params: Connection) => {
-      // Helper to parse handle ids: "<table>_<col>_<index>"
-      const parseHandle = (handleId?: string | null) => {
-        if (!handleId) return null;
+      console.log('[onConnect] Connection attempt:', {
+        source: params.source,
+        target: params.target,
+        sourceHandle: params.sourceHandle,
+        targetHandle: params.targetHandle,
+      });
+
+      // Block connecting a column to itself
+      if (
+        params.source === params.target &&
+        params.sourceHandle === params.targetHandle
+      ) {
+        console.log('[onConnect] Blocked: self-column connection');
+        toast.error('Cannot connect column to itself', {
+          description: 'A column cannot reference itself',
+          position: 'bottom-center',
+          duration: 2000,
+        });
+        return;
+      }
+
+      // Validate in strict mode
+      if (connectionMode === 'strict') {
+        const sourceNode = nodes.find((n) => n.id === params.source);
+        if (sourceNode) {
+          const sourceHandleId = params.sourceHandle;
+          if (sourceHandleId) {
+            const sourceColumn = sourceNode.data.columns?.find(
+              (_col: any, index: number) => {
+                const handleId = `${sourceNode.id}_${_col.title}_${index}`;
+                return handleId === sourceHandleId;
+              },
+            );
+
+            const isForeignKey = sourceColumn?.fk !== undefined;
+            console.log('[onConnect] Strict mode check:', {
+              sourceColumn: sourceColumn?.title,
+              isForeignKey,
+            });
+
+            if (!isForeignKey) {
+              toast.error('Only foreign keys can create connections', {
+                description:
+                  'In strict mode, only FK columns (green handles) can start connections',
+                position: 'bottom-center',
+                duration: 2500,
+              });
+              return;
+            }
+          }
+        }
+      }
+
+      // Helper to parse handle ids by looking up actual node data
+      // Handle format: "<table>_<col>_<index>" but col can contain underscores
+      const parseHandle = (
+        handleId?: string | null,
+        nodeId?: string | null,
+      ) => {
+        if (!handleId || !nodeId) return null;
+
+        // Find the node to get actual column data
+        const node = nodes.find((n) => n.id === nodeId);
+        if (!node || !node.data.columns) return null;
+
+        // Handle format: tableName_columnName_index
+        // We know the table name (nodeId) and can extract index from the end
         const parts = handleId.split('_');
         const idxPart = parts.pop();
         const index = idxPart ? Number(idxPart) : NaN;
-        const col = parts.pop() ?? '';
-        const table = parts.join('_');
-        return { table, col, index };
+
+        if (
+          Number.isNaN(index) ||
+          index < 0 ||
+          index >= node.data.columns.length
+        ) {
+          return null;
+        }
+
+        // Get actual column name from node data using index
+        const column = node.data.columns[index];
+        if (!column) return null;
+
+        return { table: nodeId, col: column.title, index };
       };
 
       try {
-        const src = parseHandle(params.sourceHandle as string | null);
-        const tgt = parseHandle(params.targetHandle as string | null);
+        const src = parseHandle(params.sourceHandle, params.source);
+        const tgt = parseHandle(params.targetHandle, params.target);
+
+        console.log('[onConnect] Parsed handles:', { src, tgt });
 
         if (
           src &&
@@ -798,6 +876,13 @@ function FlowCanvasInner() {
         ) {
           // Persist FK on the source column so tablesToEdges will regenerate this relationship
           const fkValue = `${tgt.table}.${tgt.col}`;
+          console.log('[onConnect] Creating FK:', {
+            sourceTable: src.table,
+            sourceCol: src.col,
+            sourceIndex: src.index,
+            fkValue,
+          });
+
           updateColumn(src.table, src.index, { fk: fkValue });
 
           toast.success('Relationship created', {
@@ -807,36 +892,32 @@ function FlowCanvasInner() {
           });
         }
       } catch (err) {
-        console.error('Failed to persist FK on connect:', err);
+        console.error('[onConnect] Failed to persist FK:', err);
       }
 
       // Still add the visual edge immediately for instant feedback
       setEdges((eds) => addEdge(params, eds));
     },
-    [setEdges, updateColumn],
+    [setEdges, updateColumn, connectionMode, nodes],
   );
 
-  // Validate connections based on connection mode
+  // Validate connections based on connection mode (no toasts - visual validation only)
   const isValidConnection = useCallback(
     (connection: Edge | Connection) => {
-      // Allow self-referencing tables (valid DB pattern like manager_id → id)
-      // But block connecting a column to itself (meaningless)
+      // Block connecting a column to itself
       if (
         connection.source === connection.target &&
         connection.sourceHandle === connection.targetHandle
       ) {
-        toast.error('Cannot connect column to itself', {
-          description: 'A column cannot reference itself',
-          position: 'bottom-center',
-          duration: 2000,
-        });
         return false;
       }
 
+      // In flexible mode, allow all connections
       if (connectionMode === 'flexible') {
         return true;
       }
 
+      // In strict mode, only FK columns can start connections
       const sourceNode = nodes.find((n) => n.id === connection.source);
       if (!sourceNode) return false;
 
@@ -850,18 +931,7 @@ function FlowCanvasInner() {
         },
       );
 
-      const isForeignKey = sourceColumn?.fk !== undefined;
-
-      if (!isForeignKey) {
-        toast.error('Only foreign keys can create connections', {
-          description:
-            'In strict mode, only FK columns (green handles) can start connections',
-          position: 'bottom-center',
-          duration: 2500,
-        });
-      }
-
-      return isForeignKey;
+      return sourceColumn?.fk !== undefined;
     },
     [connectionMode, nodes],
   );
@@ -963,21 +1033,21 @@ function FlowCanvasInner() {
           eds.map((edge) =>
             edge.id === selectedEdge.id
               ? {
-                ...edge,
-                markerStart:
-                  type === 'many-to-many'
-                    ? {
-                      type: MarkerType.ArrowClosed,
-                      width: 20,
-                      height: 20,
-                      color: '#6B7280',
-                    }
-                    : undefined,
-                data: {
-                  ...edge.data,
-                  relationshipType: type,
-                },
-              }
+                  ...edge,
+                  markerStart:
+                    type === 'many-to-many'
+                      ? {
+                          type: MarkerType.ArrowClosed,
+                          width: 20,
+                          height: 20,
+                          color: '#6B7280',
+                        }
+                      : undefined,
+                  data: {
+                    ...edge.data,
+                    relationshipType: type,
+                  },
+                }
               : edge,
           ),
         );
@@ -1146,14 +1216,21 @@ function FlowCanvasInner() {
       {/* Connection Mode Toggle */}
       <div className="absolute bottom-28 left-4 z-10">
         <button
-          onClick={() => setConnectionMode(prev => prev === 'flexible' ? 'strict' : 'flexible')}
-          className={`p-2 rounded-lg border transition-all shadow-sm hover:shadow-md ${connectionMode === 'flexible'
-            ? 'bg-emerald-50 dark:bg-emerald-900/30 border-emerald-200 dark:border-emerald-700 text-emerald-600 dark:text-emerald-400'
-            : 'bg-amber-50 dark:bg-amber-900/30 border-amber-200 dark:border-amber-700 text-amber-600 dark:text-amber-400'
-            }`}
-          title={connectionMode === 'flexible'
-            ? 'Flex Mode: Any column can connect to any column. Click to switch to Strict Mode.'
-            : 'Strict Mode: Only FK columns can start connections. Click to switch to Flex Mode.'}
+          onClick={() =>
+            setConnectionMode((prev) =>
+              prev === 'flexible' ? 'strict' : 'flexible',
+            )
+          }
+          className={`p-2 rounded-lg border transition-all shadow-sm hover:shadow-md ${
+            connectionMode === 'flexible'
+              ? 'bg-emerald-50 dark:bg-emerald-900/30 border-emerald-200 dark:border-emerald-700 text-emerald-600 dark:text-emerald-400'
+              : 'bg-amber-50 dark:bg-amber-900/30 border-amber-200 dark:border-amber-700 text-amber-600 dark:text-amber-400'
+          }`}
+          title={
+            connectionMode === 'flexible'
+              ? 'Flex Mode: Any column can connect to any column. Click to switch to Strict Mode.'
+              : 'Strict Mode: Only FK columns can start connections. Click to switch to Flex Mode.'
+          }
         >
           {connectionMode === 'flexible' ? (
             <Unlock size={18} />

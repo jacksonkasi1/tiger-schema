@@ -1,6 +1,6 @@
 'use client';
 
-import { memo } from 'react';
+import { memo, useState } from 'react';
 import { Handle, Position, NodeProps } from '@xyflow/react';
 import {
   Bookmark,
@@ -24,6 +24,12 @@ function ViewNodeComponent({ data, selected, id }: NodeProps) {
   const viewData = data as unknown as TableNodeData;
   const viewName = id; // Node ID is the view name
 
+  // Track hover state for showing handles
+  const [isHovered, setIsHovered] = useState(false);
+
+  // Show handles when selected or hovered
+  const showHandles = selected || isHovered;
+
   return (
     <TooltipProvider delayDuration={150}>
       <div
@@ -35,12 +41,14 @@ function ViewNodeComponent({ data, selected, id }: NodeProps) {
           'shadow-sm',
           selected
             ? 'border-blue-400 dark:border-blue-500'
-            : 'border-purple-200 dark:border-purple-800'
+            : 'border-purple-200 dark:border-purple-800',
         )}
         style={{
           minWidth: '200px',
           backgroundColor: 'var(--tw-bg-opacity, 1)',
         }}
+        onMouseEnter={() => setIsHovered(true)}
+        onMouseLeave={() => setIsHovered(false)}
       >
         {/* View Header */}
         <div className="py-2 pb-3 px-2 text-purple-700 dark:text-purple-300 bg-purple-100 dark:bg-purple-900 font-medium text-lg text-center border-b-2 border-purple-200 dark:border-purple-800 flex items-center justify-center rounded-t-md">
@@ -64,29 +72,30 @@ function ViewNodeComponent({ data, selected, id }: NodeProps) {
 
             return (
               <div key={handleId} className="relative group">
-                {/* Left Handle - Target */}
+                {/* Left Handle - Target (for incoming connections) */}
                 <Handle
                   type="target"
                   position={Position.Left}
                   id={handleId}
                   className={cn(
-                    '!w-3 !h-3 !bg-blue-500 !border-2 !border-white dark:!border-purple-900 !-left-[9px] !transition-opacity',
-                    selected ? '!opacity-100' : '!opacity-0'
+                    '!w-3 !h-3 !border-2 !border-white dark:!border-purple-900',
+                    '!transition-opacity !duration-150',
+                    col.pk ? '!bg-blue-500' : '!bg-gray-400',
+                    showHandles ? '!opacity-100' : '!opacity-0',
                   )}
-                  style={{ top: '50%', transform: 'translateY(-50%)' }}
                 />
 
-                {/* Right Handle - Source */}
+                {/* Right Handle - Source (for outgoing connections) */}
                 <Handle
                   type="source"
                   position={Position.Right}
                   id={handleId}
                   className={cn(
-                    '!w-3 !h-3 !border-2 !border-white dark:!border-purple-900 !-right-[7px] !transition-opacity',
+                    '!w-3 !h-3 !border-2 !border-white dark:!border-purple-900',
+                    '!transition-opacity !duration-150',
                     col.fk ? '!bg-emerald-500' : '!bg-blue-500',
-                    selected ? '!opacity-100' : '!opacity-0'
+                    showHandles ? '!opacity-100' : '!opacity-0',
                   )}
-                  style={{ top: '50%', transform: 'translateY(-50%)' }}
                 />
 
                 <div
@@ -94,7 +103,7 @@ function ViewNodeComponent({ data, selected, id }: NodeProps) {
                     'py-1 px-4 flex items-center text-purple-900 dark:text-purple-100',
                     'border-l-3 border-transparent',
                     'hover:bg-purple-100 dark:hover:bg-purple-800',
-                    col.pk && 'border-purple-500'
+                    col.pk && 'border-purple-500',
                   )}
                 >
                   <div className="flex items-center gap-1.5 flex-grow min-w-0">
