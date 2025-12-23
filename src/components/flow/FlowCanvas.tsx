@@ -29,7 +29,10 @@ import { getLayoutedNodesWithSchemas } from '@/lib/layout';
 import { RelationshipType, FlowEdge } from '@/types/flow';
 import { MarkerType } from '@xyflow/react';
 import { toast } from 'sonner';
+import { Lock, Unlock } from 'lucide-react';
 import { Table, TableState } from '@/lib/types';
+import { cn } from '@/lib/utils';
+import { debugLog } from '@/lib/debug';
 
 const nodeTypes = {
   table: ModernTableNode,
@@ -115,6 +118,165 @@ const isInputLikeElement = (target: EventTarget | null): boolean => {
   );
 };
 
+/**
+ * Get the type category for a PostgreSQL data type.
+ * Types in the same category are compatible for FK relationships.
+ *
+ * NOTE: Unknown/empty types return an empty category string and emit a dev-only
+ * warning. Callers (e.g. `areTypesCompatible`) should treat empty categories as
+ * incompatible in strict mode unless the raw types are exactly equal.
+ */
+const getTypeCategory = (type: string): string => {
+  const rawType = (type || '').trim();
+
+  // Guard: no discernible type
+  if (!rawType) {
+    debugLog.warn(
+      '[FlowCanvas] getTypeCategory called with empty/unknown type',
+    );
+    return '';
+  }
+
+  const t = rawType.toLowerCase();
+
+  // UUID type
+  if (t === 'uuid') return 'uuid';
+
+  // Integer types (all compatible with each other)
+  if (
+    t === 'integer' ||
+    t === 'int' ||
+    t === 'int4' ||
+    t === 'smallint' ||
+    t === 'int2' ||
+    t === 'bigint' ||
+    t === 'int8' ||
+    t === 'serial' ||
+    t === 'smallserial' ||
+    t === 'bigserial' ||
+    t.includes('serial')
+  ) {
+    return 'integer';
+  }
+
+  // Numeric/decimal types
+  if (
+    t === 'numeric' ||
+    t === 'decimal' ||
+    t.startsWith('numeric(') ||
+    t.startsWith('decimal(')
+  ) {
+    return 'numeric';
+  }
+
+  // Floating point types
+  if (
+    t === 'real' ||
+    t === 'float4' ||
+    t === 'double precision' ||
+    t === 'float8' ||
+    t.startsWith('float')
+  ) {
+    return 'float';
+  }
+
+  // String types (varchar, char, text are compatible)
+  if (
+    t === 'text' ||
+    t === 'varchar' ||
+    t === 'char' ||
+    t === 'character' ||
+    t === 'character varying' ||
+    t.startsWith('varchar(') ||
+    t.startsWith('char(') ||
+    t.startsWith('character(') ||
+    t.startsWith('character varying(')
+  ) {
+    return 'string';
+  }
+
+  // Boolean type
+  if (t === 'boolean' || t === 'bool') return 'boolean';
+
+  // Date type
+  if (t === 'date') return 'date';
+
+  // Time types (time with/without timezone)
+  if (t === 'time' || t.startsWith('time ') || t === 'timetz') return 'time';
+
+  // Timestamp types (timestamp with/without timezone)
+  if (
+    t === 'timestamp' ||
+    t === 'timestamptz' ||
+    t.startsWith('timestamp ') ||
+    t === 'timestamp with time zone' ||
+    t === 'timestamp without time zone'
+  ) {
+    return 'timestamp';
+  }
+
+  // JSON types (json and jsonb are compatible)
+  if (t === 'json' || t === 'jsonb') return 'json';
+
+  // Bytea (binary)
+  if (t === 'bytea') return 'bytea';
+
+  // Array types - extract base type
+  if (t.endsWith('[]')) {
+    const baseType = t.slice(0, -2);
+    return `array:${getTypeCategory(baseType)}`;
+  }
+
+  // Enum types - return as-is for exact matching
+  if (t === 'enum') return 'enum';
+
+  // For unknown types, return as-is (will require exact match)
+  return t;
+};
+
+/**
+ * Check if two PostgreSQL types are compatible for FK relationships.
+ * In strict mode, types must be in the same category.
+ *
+ * Conservative behavior for unknown types:
+ * - If either category is empty (unknown) and types don't match exactly, they're incompatible
+ * - This prevents accidental connections between columns with missing type information
+ */
+const areTypesCompatible = (
+  sourceType: string,
+  targetType: string,
+): boolean => {
+  const sourceCategory = getTypeCategory(sourceType);
+  const targetCategory = getTypeCategory(targetType);
+
+  // Guard: if either category is unknown (empty) and types don't match exactly, incompatible
+  if (sourceCategory === '' || targetCategory === '') {
+    // Only allow if raw types are exactly equal
+    const isExactMatch =
+      sourceType.trim().toLowerCase() === targetType.trim().toLowerCase();
+    if (!isExactMatch) {
+      debugLog.warn(
+        '[FlowCanvas] Type compatibility denied due to unknown category',
+        { sourceType, targetType, sourceCategory, targetCategory },
+      );
+    }
+    return isExactMatch;
+  }
+
+  // Same category = compatible
+  if (sourceCategory === targetCategory) return true;
+
+  // Special case: integer and numeric can reference each other (common pattern)
+  if (
+    (sourceCategory === 'integer' && targetCategory === 'numeric') ||
+    (sourceCategory === 'numeric' && targetCategory === 'integer')
+  ) {
+    return true;
+  }
+
+  return false;
+};
+
 function FlowCanvasInner() {
   const {
     tables,
@@ -155,14 +317,17 @@ function FlowCanvasInner() {
   // Track manually deleted edges to prevent auto-restore
   const deletedEdgesRef = useRef<Set<string>>(new Set());
 
+  // Track when connection is being dragged to show handles on all nodes
+  const [isConnecting, setIsConnecting] = useState(false);
+
   // Connection mode with localStorage persistence
-  const [connectionMode, _setConnectionMode] = useState<'strict' | 'flexible'>(
+  const [connectionMode, setConnectionMode] = useState<'strict' | 'flexible'>(
     () => {
       if (typeof window !== 'undefined') {
         const saved = localStorage.getItem('connection-mode');
-        return (saved as 'strict' | 'flexible') || 'strict';
+        return (saved as 'strict' | 'flexible') || 'flexible';
       }
-      return 'strict';
+      return 'flexible';
     },
   );
 
@@ -210,7 +375,7 @@ function FlowCanvasInner() {
   useEffect(() => {
     // Use setTimeout(0) to yield to browser rendering, preventing UI freeze
     const timeoutId = setTimeout(() => {
-      console.log('[FlowCanvas] Converting tables to nodes/edges...', {
+      debugLog.log('[FlowCanvas] Converting tables to nodes/edges...', {
         tableCount: Object.keys(tables).length,
         visibleSchemasSize: visibleSchemas.size,
         visibleSchemas: Array.from(visibleSchemas),
@@ -289,12 +454,12 @@ function FlowCanvasInner() {
           } as FlowEdge;
         });
 
-      console.log(
+      debugLog.log(
         `[FlowCanvas] Setting ${nodesWithUniqueIds.length} nodes and ${flowEdges.length} edges`,
       );
       setNodes(nodesWithUniqueIds);
       setEdges(flowEdges);
-      console.log('[FlowCanvas] Nodes/edges set');
+      debugLog.log('[FlowCanvas] Nodes/edges set');
 
       // Reset pending flag if tables are empty
       if (nodesWithUniqueIds.length === 0) {
@@ -313,7 +478,7 @@ function FlowCanvasInner() {
         isApplyingLayoutRef.current = true;
         requestAnimationFrame(() => {
           requestAnimationFrame(() => {
-            console.log('[FlowCanvas] Auto-triggering layout after nodes set');
+            debugLog.log('[FlowCanvas] Auto-triggering layout after nodes set');
             const layoutedNodes = getLayoutedNodesWithSchemas(
               nodesWithUniqueIds,
               flowEdges,
@@ -367,7 +532,7 @@ function FlowCanvasInner() {
 
       if (nodes.length > 0 && edges.length > 0) {
         // Nodes are ready, layout immediately
-        console.log('[FlowCanvas] Layout triggered, nodes ready');
+        debugLog.log('[FlowCanvas] Layout triggered, nodes ready');
         isApplyingLayoutRef.current = true;
 
         // Use requestAnimationFrame to ensure we're not blocking
@@ -402,7 +567,7 @@ function FlowCanvasInner() {
         });
       } else {
         // Nodes not ready yet, mark as pending
-        console.log(
+        debugLog.log(
           '[FlowCanvas] Layout triggered but nodes not ready, marking as pending',
         );
         pendingLayoutRef.current = true;
@@ -770,42 +935,129 @@ function FlowCanvasInner() {
 
   // Handle multiple nodes drag
   const onNodesDelete = useCallback((deleted: any[]) => {
-    console.log('Nodes deleted:', deleted);
+    debugLog.log('Nodes deleted:', deleted);
+  }, []);
+
+  // Track connection start to show handles on all nodes
+  const onConnectStart = useCallback(() => {
+    setIsConnecting(true);
+  }, []);
+
+  // Track connection end to hide handles
+  const onConnectEnd = useCallback(() => {
+    setIsConnecting(false);
   }, []);
 
   const onConnect = useCallback(
     (params: Connection) => {
-      // Helper to parse handle ids: "<table>_<col>_<index>"
-      // Now using nodeId (table name) to correctly identify the split point
-      const parseHandle = (handleId: string | null, nodeId: string | null) => {
+      debugLog.log('[onConnect] Connection attempt:', {
+        source: params.source,
+        target: params.target,
+        sourceHandle: params.sourceHandle,
+        targetHandle: params.targetHandle,
+      });
+
+      // Block connecting a column to itself
+      if (
+        params.source === params.target &&
+        params.sourceHandle === params.targetHandle
+      ) {
+        debugLog.log('[onConnect] Blocked: self-column connection');
+        toast.error('Cannot connect column to itself', {
+          description: 'A column cannot reference itself',
+          position: 'bottom-center',
+          duration: 2000,
+        });
+        return;
+      }
+
+      // Validate in strict mode - check type compatibility
+      if (connectionMode === 'strict') {
+        const sourceNode = nodes.find((n) => n.id === params.source);
+        const targetNode = nodes.find((n) => n.id === params.target);
+        if (sourceNode && targetNode) {
+          const sourceHandleId = params.sourceHandle;
+          const targetHandleId = params.targetHandle;
+          if (sourceHandleId && targetHandleId) {
+            const sourceColumn = sourceNode.data.columns?.find(
+              (_col: any, index: number) => {
+                const handleId = `${sourceNode.id}_${_col.title}_${index}`;
+                return handleId === sourceHandleId;
+              },
+            );
+            const targetColumn = targetNode.data.columns?.find(
+              (_col: any, index: number) => {
+                const handleId = `${targetNode.id}_${_col.title}_${index}`;
+                return handleId === targetHandleId;
+              },
+            );
+
+            // In strict mode, validate type compatibility using category matching
+            // Use format first (contains PostgreSQL type like uuid, varchar) instead of type (generic like string, number)
+            const sourceType = sourceColumn?.format || sourceColumn?.type || '';
+            const targetType = targetColumn?.format || targetColumn?.type || '';
+            const isTypeCompatible = areTypesCompatible(sourceType, targetType);
+
+            debugLog.log('[onConnect] Strict mode check:', {
+              sourceColumn: sourceColumn?.title,
+              targetColumn: targetColumn?.title,
+              sourceType,
+              targetType,
+              sourceCategory: getTypeCategory(sourceType),
+              targetCategory: getTypeCategory(targetType),
+              isTypeCompatible,
+            });
+
+            if (!isTypeCompatible) {
+              toast.error('Type mismatch', {
+                description: `Cannot connect ${sourceType || 'unknown'} to ${targetType || 'unknown'}. Types must be compatible.`,
+                position: 'bottom-center',
+                duration: 2500,
+              });
+              return;
+            }
+          }
+        }
+      }
+
+      // Helper to parse handle ids by looking up actual node data
+      // Handle format: "<table>_<col>_<index>" but col can contain underscores
+      const parseHandle = (
+        handleId?: string | null,
+        nodeId?: string | null,
+      ) => {
         if (!handleId || !nodeId) return null;
 
-        // Ensure the handle belongs to the node
-        if (!handleId.startsWith(`${nodeId}_`)) return null;
+        // Find the node to get actual column data
+        const node = nodes.find((n) => n.id === nodeId);
+        if (!node || !node.data.columns) return null;
 
-        // Extract the part after the node id
-        const remainder = handleId.slice(nodeId.length + 1);
-        const parts = remainder.split('_');
-
-        // Last part is the index
+        // Handle format: tableName_columnName_index
+        // We know the table name (nodeId) and can extract index from the end
+        const parts = handleId.split('_');
         const idxPart = parts.pop();
         const index = idxPart ? Number(idxPart) : NaN;
 
-        // The rest is the column name (which might contain underscores)
-        const col = parts.join('_');
+        if (
+          Number.isNaN(index) ||
+          index < 0 ||
+          index >= node.data.columns.length
+        ) {
+          return null;
+        }
 
-        return { table: nodeId, col, index };
+        // Get actual column name from node data using index
+        const column = node.data.columns[index];
+        if (!column) return null;
+
+        return { table: nodeId, col: column.title, index };
       };
 
       try {
-        const src = parseHandle(
-          params.sourceHandle as string | null,
-          params.source,
-        );
-        const tgt = parseHandle(
-          params.targetHandle as string | null,
-          params.target,
-        );
+        const src = parseHandle(params.sourceHandle, params.source);
+        const tgt = parseHandle(params.targetHandle, params.target);
+
+        debugLog.log('[onConnect] Parsed handles:', { src, tgt });
 
         if (
           src &&
@@ -815,6 +1067,13 @@ function FlowCanvasInner() {
         ) {
           // Persist FK on the source column so tablesToEdges will regenerate this relationship
           const fkValue = `${tgt.table}.${tgt.col}`;
+          debugLog.log('[onConnect] Creating FK:', {
+            sourceTable: src.table,
+            sourceCol: src.col,
+            sourceIndex: src.index,
+            fkValue,
+          });
+
           updateColumn(src.table, src.index, { fk: fkValue });
 
           toast.success('Relationship created', {
@@ -824,36 +1083,39 @@ function FlowCanvasInner() {
           });
         }
       } catch (err) {
-        console.error('Failed to persist FK on connect:', err);
+        console.error('[onConnect] Failed to persist FK:', err);
       }
 
       // Still add the visual edge immediately for instant feedback
       setEdges((eds) => addEdge(params, eds));
     },
-    [setEdges, updateColumn],
+    [setEdges, updateColumn, connectionMode, nodes],
   );
 
-  // Validate connections based on connection mode
+  // Validate connections based on connection mode (no toasts - visual validation only)
   const isValidConnection = useCallback(
     (connection: Edge | Connection) => {
-      if (connection.source === connection.target) {
-        toast.error('Cannot connect to self', {
-          description: 'A table cannot have a relationship with itself',
-          position: 'bottom-center',
-          duration: 2000,
-        });
+      // Block connecting a column to itself
+      if (
+        connection.source === connection.target &&
+        connection.sourceHandle === connection.targetHandle
+      ) {
         return false;
       }
 
+      // In flexible mode, allow all connections
       if (connectionMode === 'flexible') {
         return true;
       }
 
+      // In strict mode, validate type compatibility between source and target columns
       const sourceNode = nodes.find((n) => n.id === connection.source);
-      if (!sourceNode) return false;
+      const targetNode = nodes.find((n) => n.id === connection.target);
+      if (!sourceNode || !targetNode) return false;
 
       const sourceHandleId = connection.sourceHandle;
-      if (!sourceHandleId) return false;
+      const targetHandleId = connection.targetHandle;
+      if (!sourceHandleId || !targetHandleId) return false;
 
       const sourceColumn = sourceNode.data.columns?.find(
         (_col: any, index: number) => {
@@ -861,19 +1123,21 @@ function FlowCanvasInner() {
           return handleId === sourceHandleId;
         },
       );
+      const targetColumn = targetNode.data.columns?.find(
+        (_col: any, index: number) => {
+          const handleId = `${targetNode.id}_${_col.title}_${index}`;
+          return handleId === targetHandleId;
+        },
+      );
 
-      const isForeignKey = sourceColumn?.fk !== undefined;
+      if (!sourceColumn || !targetColumn) return false;
 
-      if (!isForeignKey) {
-        toast.error('Only foreign keys can create connections', {
-          description:
-            'In strict mode, only FK columns (green handles) can start connections',
-          position: 'bottom-center',
-          duration: 2500,
-        });
-      }
+      // Check type compatibility using category matching
+      // Use format first (contains PostgreSQL type like uuid, varchar) instead of type (generic like string, number)
+      const sourceType = sourceColumn.format || sourceColumn.type || '';
+      const targetType = targetColumn.format || targetColumn.type || '';
 
-      return isForeignKey;
+      return areTypesCompatible(sourceType, targetType);
     },
     [connectionMode, nodes],
   );
@@ -1117,7 +1381,7 @@ function FlowCanvasInner() {
 
   return (
     <div
-      className="w-full h-screen"
+      className={cn('w-full h-screen', isConnecting && 'connecting')}
       ref={flowWrapperRef}
       onMouseMove={updateCursorPosition}
     >
@@ -1130,6 +1394,8 @@ function FlowCanvasInner() {
         onNodesDelete={onNodesDelete}
         onEdgesDelete={onEdgesDelete}
         onConnect={onConnect}
+        onConnectStart={onConnectStart}
+        onConnectEnd={onConnectEnd}
         isValidConnection={isValidConnection}
         onNodeClick={onNodeClick}
         onEdgeClick={onEdgeClick}
@@ -1154,6 +1420,33 @@ function FlowCanvasInner() {
           nodeClassName="!fill-warm-gray-300 dark:!fill-dark-700"
         />
       </ReactFlow>
+
+      {/* Connection Mode Toggle */}
+      <div className="absolute bottom-28 left-4 z-10">
+        <button
+          onClick={() =>
+            setConnectionMode((prev) =>
+              prev === 'flexible' ? 'strict' : 'flexible',
+            )
+          }
+          className={`p-2 rounded-lg border transition-all shadow-sm hover:shadow-md ${
+            connectionMode === 'flexible'
+              ? 'bg-emerald-50 dark:bg-emerald-900/30 border-emerald-200 dark:border-emerald-700 text-emerald-600 dark:text-emerald-400'
+              : 'bg-amber-50 dark:bg-amber-900/30 border-amber-200 dark:border-amber-700 text-amber-600 dark:text-amber-400'
+          }`}
+          title={
+            connectionMode === 'flexible'
+              ? 'Flexible Mode: Any column can connect to any column. Click to switch to Strict Mode.'
+              : 'Strict Mode: Only type-compatible columns can connect. Click to switch to Flexible Mode.'
+          }
+        >
+          {connectionMode === 'flexible' ? (
+            <Unlock size={18} />
+          ) : (
+            <Lock size={18} />
+          )}
+        </button>
+      </div>
 
       {/* Relationship Selector */}
       {selectedEdge && (

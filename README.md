@@ -30,6 +30,50 @@
 - 🚪 Login-less
 - 👀 No Sensitive info required
 - 🤚 Moveable Schema for own design
+- 🔗 Visual relationship creation with drag & drop
+- 🔐 Strict & Flexible connection modes
+
+## 🔗 Connection Modes
+
+When creating relationships between tables by dragging from one column to another, you can choose between two modes using the lock button in the bottom-left corner of the canvas:
+
+### 🔓 Flexible Mode (Unlock Icon)
+
+In Flexible Mode, you can connect **any column to any column** without type restrictions. This is useful when:
+- You want to quickly sketch out relationships
+- You're working with custom types or extensions
+- You need maximum flexibility in your schema design
+
+### 🔐 Strict Mode (Lock Icon)
+
+In Strict Mode, connections are only allowed between **type-compatible columns**. The system validates that the source and target columns have compatible PostgreSQL data types.
+
+#### Type Compatibility Groups
+
+| Category | Compatible Types |
+|----------|------------------|
+| **UUID** | `uuid` |
+| **Integer** | `integer`, `int`, `int2`, `int4`, `int8`, `smallint`, `bigint`, `serial`, `smallserial`, `bigserial` |
+| **Numeric** | `numeric`, `decimal` |
+| **Float** | `real`, `float4`, `double precision`, `float8` |
+| **String** | `text`, `varchar`, `char`, `character`, `character varying` |
+| **Boolean** | `boolean`, `bool` |
+| **Date** | `date` |
+| **Time** | `time`, `timetz` |
+| **Timestamp** | `timestamp`, `timestamptz` |
+| **JSON** | `json`, `jsonb` |
+| **Binary** | `bytea` |
+
+#### Examples
+
+| Connection | Types | Strict Mode |
+|------------|-------|-------------|
+| `orders.user_id` → `users.id` | uuid → uuid | ✅ Allowed |
+| `orders.user_id` → `products.description` | uuid → text | ❌ Blocked |
+| `items.product_id` → `products.id` | integer → bigint | ✅ Allowed |
+| `orders.created_at` → `logs.timestamp` | timestamp → timestamptz | ✅ Allowed |
+
+When a connection is blocked in Strict Mode, you'll see a toast notification explaining the type mismatch.
 
 ## 📇 About The Project
 

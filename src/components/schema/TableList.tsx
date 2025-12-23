@@ -50,7 +50,7 @@ export function TableList() {
     if (over && active.id !== over.id) {
       const oldIndex = filteredTableIds.indexOf(active.id as string);
       const newIndex = filteredTableIds.indexOf(over.id as string);
-      
+
       // TODO: Update table order in store
       console.log('Reorder:', arrayMove(filteredTableIds, oldIndex, newIndex));
     }
@@ -63,14 +63,14 @@ export function TableList() {
   return (
     <div className="flex flex-col h-full">
       {/* Search */}
-      <div className="px-4 py-3 border-b border-border/50">
+      <div className="px-3 py-3 border-b border-border/30">
         <div className="relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground/40 pointer-events-none" />
           <Input
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Search tables..."
-            className="h-9 pl-9 text-sm"
+            className="h-8 pl-8 text-xs bg-muted/20 border-border/30 hover:border-border/50 focus-visible:border-primary/40 focus-visible:ring-1 focus-visible:ring-ring/15"
             autoFocus
           />
         </div>
@@ -78,7 +78,7 @@ export function TableList() {
 
       {/* Tables List */}
       <ScrollArea className="flex-1">
-        <div className="py-2">
+        <div className="py-1">
           {filteredTableIds.length > 0 ? (
             <DndContext
               sensors={sensors}
@@ -95,7 +95,7 @@ export function TableList() {
               </SortableContext>
             </DndContext>
           ) : (
-            <div className="text-center py-12 px-4 text-sm text-muted-foreground">
+            <div className="text-center py-12 px-4 text-xs text-muted-foreground/50">
               {searchQuery ? 'No tables found' : 'No tables in schema'}
             </div>
           )}
@@ -103,9 +103,9 @@ export function TableList() {
       </ScrollArea>
 
       {/* Add Table Button */}
-      <div className="px-4 py-3 border-t border-border/50">
-        <Button className="w-full" size="sm" onClick={handleAddTable}>
-          <Plus className="h-4 w-4 mr-2" />
+      <div className="px-3 py-3 border-t border-border/30">
+        <Button className="w-full h-8 text-xs" size="sm" onClick={handleAddTable}>
+          <Plus className="h-3.5 w-3.5 mr-1.5" />
           Add Table
         </Button>
       </div>

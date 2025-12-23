@@ -38,12 +38,17 @@ const CommandInput = React.forwardRef<
   React.ElementRef<typeof CommandPrimitive.Input>,
   React.ComponentPropsWithoutRef<typeof CommandPrimitive.Input>
 >(({ className, ...props }, ref) => (
-  <div className="flex items-center border-b px-3" cmdk-input-wrapper="">
-    <Search className="mr-2 h-4 w-4 shrink-0 opacity-50" />
+  <div
+    className="flex items-center gap-2 mx-2 mt-2 mb-1 px-2.5 rounded-md border border-border/40 bg-muted/20 focus-within:border-primary/50 focus-within:bg-background focus-within:ring-1 focus-within:ring-ring/20 transition-all"
+    cmdk-input-wrapper=""
+  >
+    <Search className="h-3.5 w-3.5 shrink-0 text-muted-foreground/50" />
     <CommandPrimitive.Input
       ref={ref}
       className={cn(
-        "flex h-11 w-full rounded-md bg-transparent py-3 text-sm outline-none placeholder:text-muted-foreground disabled:cursor-not-allowed disabled:opacity-50",
+        "flex h-8 w-full bg-transparent py-2 text-sm outline-none",
+        "placeholder:text-muted-foreground/50",
+        "disabled:cursor-not-allowed disabled:opacity-50",
         className
       )}
       {...props}
@@ -114,7 +119,11 @@ const CommandItem = React.forwardRef<
   <CommandPrimitive.Item
     ref={ref}
     className={cn(
-      "relative flex cursor-default gap-2 select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none data-[disabled=true]:pointer-events-none data-[selected='true']:bg-accent data-[selected=true]:text-accent-foreground data-[disabled=true]:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0",
+      "relative flex cursor-default gap-2 select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none",
+      "transition-colors duration-150 ease-out",
+      "data-[disabled=true]:pointer-events-none data-[disabled=true]:opacity-50",
+      "data-[selected='true']:bg-accent data-[selected=true]:text-accent-foreground",
+      "[&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0",
       className
     )}
     {...props}

@@ -15,10 +15,10 @@ function ModernTableNodeComponent({ data, selected, id }: NodeProps) {
   return (
     <div
       className={cn(
-        'rounded-lg overflow-hidden bg-background shadow-lg transition-all',
-        'border-2',
+        'rounded-md overflow-visible bg-background shadow-sm transition-all',
+        'border',
         selected
-          ? 'border-primary ring-2 ring-primary/20 shadow-xl'
+          ? 'border-blue-400 dark:border-blue-500'
           : 'border-border',
       )}
       style={{
@@ -28,7 +28,7 @@ function ModernTableNodeComponent({ data, selected, id }: NodeProps) {
     >
       {/* Table Header */}
       <div
-        className="py-2.5 px-3 text-foreground font-semibold text-base border-t-[4px]"
+        className="py-2.5 px-3 text-foreground font-semibold text-base border-t-[4px] rounded-t-md"
         style={{
           borderTopColor: headerColor,
           backgroundColor: `${headerColor}10`,
@@ -56,24 +56,28 @@ function ModernTableNodeComponent({ data, selected, id }: NodeProps) {
                 isPK && 'border-l-yellow-500/50',
               )}
             >
-              {/* Connection Handles */}
-              {isFK && (
-                <Handle
-                  type="source"
-                  position={Position.Right}
-                  id={handleId}
-                  className="!w-2.5 !h-2.5 !bg-emerald-500 !border-2 !border-background"
-                  style={{ top: '50%', transform: 'translateY(-50%)' }}
-                />
-              )}
-
+              {/* Connection Handles - DrawSQL inspired: common blue dots, 50% outside */}
+              {/* Left Handle - Target (for incoming connections) */}
               <Handle
                 type="target"
                 position={Position.Left}
                 id={handleId}
                 className={cn(
-                  '!w-2.5 !h-2.5 !border-2 !border-background',
-                  isPK ? '!bg-blue-500' : '!bg-muted-foreground/40',
+                  '!w-3 !h-3 !bg-blue-500 !border-2 !border-background !-left-[9px] !transition-opacity',
+                  selected ? '!opacity-100' : '!opacity-0'
+                )}
+                style={{ top: '50%', transform: 'translateY(-50%)' }}
+              />
+
+              {/* Right Handle - Source (for outgoing connections) */}
+              <Handle
+                type="source"
+                position={Position.Right}
+                id={handleId}
+                className={cn(
+                  '!w-3 !h-3 !border-2 !border-background !-right-[7px] !transition-opacity',
+                  isFK ? '!bg-emerald-500' : '!bg-blue-500',
+                  selected ? '!opacity-100' : '!opacity-0'
                 )}
                 style={{ top: '50%', transform: 'translateY(-50%)' }}
               />
