@@ -84,6 +84,45 @@ import {
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { MarkdownText } from '@/components/ui/markdown-text';
 
+// Helper to transform JSON-like responses from Gemini 3 to natural language
+// Gemini 3 preview often outputs JSON arrays despite system prompt instructions
+const transformJsonToNaturalLanguage = (text: string): string => {
+  if (!text) return text;
+  const trimmed = text.trim();
+
+  // Detect JSON array like ["table1", "table2", ...]
+  if (trimmed.startsWith('[') && trimmed.endsWith(']')) {
+    try {
+      const parsed = JSON.parse(trimmed);
+      if (Array.isArray(parsed) && parsed.every(item => typeof item === 'string')) {
+        if (parsed.length === 0) {
+          return 'There are no tables in the database.';
+        }
+        return `The tables in the database are: ${parsed.join(', ')}.`;
+      }
+    } catch {
+      // Not valid JSON, return as-is
+    }
+  }
+
+  // Detect JSON object like {"tables": ["table1", ...]}
+  if (trimmed.startsWith('{') && trimmed.endsWith('}')) {
+    try {
+      const parsed = JSON.parse(trimmed);
+      if (parsed.tables && Array.isArray(parsed.tables)) {
+        if (parsed.tables.length === 0) {
+          return 'There are no tables in the database.';
+        }
+        return `The tables in the database are: ${parsed.tables.join(', ')}.`;
+      }
+    } catch {
+      // Not valid JSON, return as-is
+    }
+  }
+
+  return text;
+};
+
 interface ChatSidebarProps {
   isOpen?: boolean;
   onOpenChange?: (open: boolean) => void;
@@ -502,13 +541,15 @@ export function ChatSidebar({
             batchData.isComplete,
           );
 
-          // Apply tables incrementally as they stream in
-          if (Object.keys(batchData.tables).length > 0) {
+          // Apply tables when complete OR when there are tables to update
+          // IMPORTANT: Must apply even when empty (for delete all operations)
+          if (batchData.isComplete || Object.keys(batchData.tables).length > 0) {
             updateTablesFromAI(batchData.tables);
 
             if (batchData.isComplete) {
+              const tableCount = Object.keys(batchData.tables).length;
               toast.success('Schema updated', {
-                description: `${Object.keys(batchData.tables).length} table${Object.keys(batchData.tables).length === 1 ? '' : 's'} in workspace`,
+                description: `${tableCount} table${tableCount === 1 ? '' : 's'} in workspace`,
               });
             }
           }
@@ -1169,7 +1210,7 @@ export function ChatSidebar({
                                       <div key={partIndex} className="text-sm">
                                         {part.text ? (
                                           <MarkdownText>
-                                            {part.text}
+                                            {transformJsonToNaturalLanguage(part.text)}
                                           </MarkdownText>
                                         ) : (
                                           <span className="text-muted-foreground animate-pulse">
@@ -1192,14 +1233,14 @@ export function ChatSidebar({
                             {message.parts.some(
                               (p: any) => p.type === 'tool',
                             ) && (
-                              <div className="space-y-1.5 mt-2">
-                                {message.parts
-                                  .filter((part: any) => part.type === 'tool')
-                                  .map((tool: any, toolIndex: number) => (
-                                    <ToolResult key={toolIndex} tool={tool} />
-                                  ))}
-                              </div>
-                            )}
+                                <div className="space-y-1.5 mt-2">
+                                  {message.parts
+                                    .filter((part: any) => part.type === 'tool')
+                                    .map((tool: any, toolIndex: number) => (
+                                      <ToolResult key={toolIndex} tool={tool} />
+                                    ))}
+                                </div>
+                              )}
 
                             {/* Action bar - assistant-ui style */}
                             <div className="flex items-center gap-1 pt-1 opacity-0 group-hover:opacity-100 transition-opacity">

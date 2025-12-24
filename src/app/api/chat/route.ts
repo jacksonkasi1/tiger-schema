@@ -208,105 +208,62 @@ const normaliseColumn = (col: z.infer<typeof columnInputSchema>): Column => {
   };
 };
 
-const SYSTEM_PROMPT = `You are a PostgreSQL schema assistant with FULL CONTEXT of all database operations.
+const SYSTEM_PROMPT = `You are an expert PostgreSQL database architect. You help users design production-quality database schemas.
 
-**IMPORTANT: YOU MUST USE TOOLS TO PERFORM ALL OPERATIONS**
-- Do NOT output JSON, code blocks, or descriptions of what you would do.
-- ALWAYS call the appropriate tool for any schema operation.
-- To create a table, call the createTable tool. To delete a table, call the dropTable tool.
-- Never just describe what you would do - ACTUALLY DO IT by calling tools.
-- If the user asks to create, delete, modify, or list tables, USE THE TOOLS.
+**CRITICAL: EXECUTION MODE**
+- You MUST use tools to execute ALL schema operations
+- Do NOT describe what you would do - EXECUTE IT using tools
+- When asked to create, delete, or modify schemas, USE THE TOOLS
 
-**CRITICAL: FOREIGN KEY RELATIONSHIPS ARE MANDATORY**
-When creating related tables, you MUST ALWAYS include foreign key (fk) properties on columns that reference other tables.
+**CRITICAL: RESPONSE FORMAT**
+- ALWAYS respond in natural, conversational language
+- NEVER output raw JSON, arrays like ["table1", "table2"], or code blocks
+- After completing tasks, summarize what you did in plain English
+- Example GOOD: "I've created 5 tables: users, products, orders, order_items, and payments"
+- Example BAD: ["users", "products", "orders", "order_items", "payments"]
 
-**FOREIGN KEY FORMAT:**
-- Use the \`fk\` property on any column that references another table
-- Format: "referenced_table.referenced_column" (e.g., "users.id", "products.id")
-- FK columns should match the type of the referenced column (usually integer for id)
+**SCHEMA QUALITY STANDARDS**
+When creating tables, include professional-grade columns:
+- Primary key: usually 'id' with type 'integer' or 'uuid'
+- Timestamps: 'created_at' (timestamp), 'updated_at' (timestamp)
+- Proper data types: varchar, text, integer, boolean, timestamp, decimal, jsonb
+- Foreign keys for ALL relationships (fk: "table.column")
+- Meaningful column names (not just 'name' - use 'first_name', 'product_name', etc.)
 
-**EXAMPLE - E-commerce Schema with Proper Relationships:**
-\`\`\`
-// Step 1: Create products table (no FKs - it's a root table)
-createTable({
-  tableId: "products",
-  columns: [
-    { title: "id", type: "integer", pk: true },
-    { title: "name", type: "string" },
-    { title: "price", type: "number" }
-  ]
-})
+**E-COMMERCE SCHEMA EXAMPLE**
+For an e-commerce request, create tables like:
 
-// Step 2: Create customers table (no FKs - it's a root table)
-createTable({
-  tableId: "customers",
-  columns: [
-    { title: "id", type: "integer", pk: true },
-    { title: "email", type: "string" }
-  ]
-})
+1. categories: id, name, description, parent_id (FK self-ref), created_at
+2. products: id, name, description, sku, price, cost, stock_quantity, category_id (FK), is_active, created_at, updated_at
+3. customers: id, email, first_name, last_name, phone, address_line1, address_line2, city, state, postal_code, country, created_at
+4. orders: id, customer_id (FK), order_number, order_date, status, subtotal, tax, shipping, total_amount, shipping_address, billing_address, created_at
+5. order_items: id, order_id (FK), product_id (FK), quantity, unit_price, total_price
+6. payments: id, order_id (FK), payment_method, amount, status, transaction_id, created_at
 
-// Step 3: Create orders table WITH FK to customers
-createTable({
-  tableId: "orders",
-  columns: [
-    { title: "id", type: "integer", pk: true },
-    { title: "customer_id", type: "integer", fk: "customers.id" },  // ← FK HERE!
-    { title: "total", type: "number" }
-  ]
-})
+**FOREIGN KEY RULES**
+- ALWAYS include fk property: fk: "table.column"
+- Create parent tables BEFORE child tables
+- Common patterns:
+  - user_id → fk: "users.id"
+  - customer_id → fk: "customers.id"
+  - product_id → fk: "products.id"
+  - order_id → fk: "orders.id"
+  - category_id → fk: "categories.id"
 
-// Step 4: Create order_items WITH FKs to orders AND products
-createTable({
-  tableId: "order_items",
-  columns: [
-    { title: "id", type: "integer", pk: true },
-    { title: "order_id", type: "integer", fk: "orders.id" },       // ← FK HERE!
-    { title: "product_id", type: "integer", fk: "products.id" },   // ← FK HERE!
-    { title: "quantity", type: "integer" }
-  ]
-})
-\`\`\`
-
-**CRITICAL RULES FOR RELATIONSHIPS:**
-1. ALWAYS create parent tables BEFORE child tables (e.g., users before posts)
-2. ALWAYS include \`fk: "table.column"\` on columns that reference other tables
-3. Common FK patterns:
-   - \`user_id\` → \`fk: "users.id"\`
-   - \`customer_id\` → \`fk: "customers.id"\`
-   - \`product_id\` → \`fk: "products.id"\`
-   - \`order_id\` → \`fk: "orders.id"\`
-   - \`category_id\` → \`fk: "categories.id"\`
-   - \`parent_id\` → \`fk: "same_table.id"\` (self-reference)
-
-**AVAILABLE TOOLS:**
-- listTables: Get all tables (use includeColumns:true for full details)
-- getTableDetails: Get specific table details
-- listSchemas: List database schemas
-- createTable: Create ONE table with columns (include fk on relationship columns!)
+**AVAILABLE TOOLS**
+- listTables: Get all tables (includeColumns:true for full details)
+- createTable: Create ONE table with columns
 - dropTable: Drop ONE table
-- renameTable: Rename ONE table
-- addColumn: Add ONE column to a table (can include fk)
-- dropColumn: Remove ONE column
-- alterColumn: Modify ONE column (can add/change fk)
-- setForeignKey: Add FK to existing column
-- removeForeignKey: Remove FK from column
+- renameTable: Rename a table
+- addColumn/dropColumn/alterColumn: Modify columns
+- setForeignKey/removeForeignKey: Manage relationships
 
-**WORKFLOW:**
-1. Create tables ONE AT A TIME
+**WORKFLOW**
+1. First call listTables to understand current schema
 2. Create parent/root tables FIRST (no FKs)
-3. Create child tables AFTER with proper FKs
-4. If user asks about missing relationships, use setForeignKey tool
+3. Create child tables with proper FKs
+4. Confirm completion with a brief summary in natural language`;
 
-**CHECKING EXISTING RELATIONSHIPS:**
-When user asks about relationships or FKs, use listTables({includeColumns: true}) to see current state.
-The fk property on columns shows existing relationships.
-
-**REMEMBER:**
-- ONE table operation per tool call
-- ALWAYS include fk property for relationship columns
-- Create parent tables before child tables
-- Verify relationships are set up correctly`;
 
 // Generate unique operation ID
 const generateOperationId = () =>
@@ -930,53 +887,11 @@ export async function POST(req: Request) {
       }),
     });
 
-    // Create the ToolLoopAgent (AI SDK 6)
+    // Create the tools
     const tools = createAtomicTools();
-    const agent = new ToolLoopAgent({
-      model,
-      instructions: SYSTEM_PROMPT,
-      tools,
-      // Agent defaults to stepCountIs(20), increase for bulk operations
-      stopWhen: stepCountIs(50),
-      // Dynamic control based on step progress (Phase 4.3)
-      prepareStep: async ({ stepNumber, steps }) => {
-        // Log progress
-        console.log(
-          `[Agent Step ${stepNumber}] Previous steps: ${steps.length}, Operations: ${operationCount}`,
-        );
-
-        // After many steps, consider forcing completion
-        if (stepNumber > 40) {
-          console.log('[Agent] Approaching step limit, encouraging completion');
-          return {
-            toolChoice: 'auto' as const,
-          };
-        }
-
-        // Default behavior
-        return {};
-      },
-      onStepFinish: ({ toolCalls, toolResults, finishReason, text }) => {
-        console.log(
-          `[Step] Tool calls: ${toolCalls?.length || 0}, ` +
-          `Results: ${toolResults?.length || 0}, ` +
-          `Text: ${text ? text.substring(0, 50) : 'none'}, ` +
-          `Finish: ${finishReason}`,
-        );
-
-        if (toolCalls) {
-          toolCalls.forEach((call, i) => {
-            console.log(`  Tool ${i + 1}: ${call.toolName}`);
-          });
-        }
-      },
-    });
 
     // Convert UIMessages to ModelMessages
     const modelMessages = await convertToModelMessages(messages);
-
-    // Track last operation count for streaming updates
-    let lastStreamedOperationCount = 0;
 
     // Create a custom UI message stream with streaming data parts support
     const stream = createUIMessageStream({
@@ -991,44 +906,55 @@ export async function POST(req: Request) {
           transient: true,
         } as CustomDataPart);
 
-        // Stream the agent response (agent.stream returns a Promise in AI SDK 6)
+        // Detect if request requires tool execution (for toolChoice)
+        const userMessage = messages[messages.length - 1]?.content || '';
+        const requiresTools = /create|delete|drop|add|modify|remove|rename|build|make|generate|design/i.test(
+          typeof userMessage === 'string' ? userMessage : ''
+        );
+
+        // Get maxSteps from request (user-configurable, default 50)
+        const maxAgentSteps = body.maxSteps ?? 50;
+
+        // Determine toolChoice based on provider:
+        // - OpenAI: use 'required' for schema operations to force tool execution
+        // - Gemini: use 'auto' always (Gemini outputs weird text like '[]' with 'required')
+        const isGemini = providerKey === 'google';
+        const toolChoiceSetting = isGemini
+          ? 'auto'  // Gemini works better with 'auto'
+          : (requiresTools ? 'required' : 'auto');
+
+        // Create the ToolLoopAgent (AI SDK 6)
+        const agent = new ToolLoopAgent({
+          model,
+          instructions: SYSTEM_PROMPT,
+          tools,
+          // User-configurable max steps for multi-step tool calling
+          stopWhen: stepCountIs(maxAgentSteps),
+          // Provider-specific tool choice
+          toolChoice: toolChoiceSetting,
+          onStepFinish: ({ toolCalls, toolResults, text, finishReason }) => {
+            console.log(
+              `[Step] Tool calls: ${toolCalls?.length || 0}, ` +
+              `Results: ${toolResults?.length || 0}, ` +
+              `Text: ${text ? text.substring(0, 50) : 'none'}, ` +
+              `Finish: ${finishReason}`,
+            );
+
+            if (toolCalls) {
+              toolCalls.forEach((call, i) => {
+                console.log(`  Tool ${i + 1}: ${call.toolName}`);
+              });
+            }
+          },
+        });
+
+        // Stream the agent response
         const result = await agent.stream({
           messages: modelMessages,
           abortSignal: abortController.signal,
         });
 
-        // Set up a periodic check for operation updates (debounced to prevent UI freeze)
-        const intervalId = setInterval(() => {
-          // Only send update if new operations occurred (debounced)
-          if (operationCount > lastStreamedOperationCount) {
-            // Send progress update
-            writer.write({
-              type: 'data-progress',
-              data: {
-                message: `Processing operation ${operationCount}...`,
-                current: operationCount,
-                total: Math.max(totalOperations, operationCount),
-                phase: 'processing',
-              },
-              transient: true,
-            } as CustomDataPart);
-
-            // Send updated tables state
-            writer.write({
-              type: 'data-tables-batch',
-              id: `tables-update-${operationCount}`,
-              data: {
-                tables: cloneTables(schemaState),
-                batchNumber: operationCount,
-                isComplete: false,
-              },
-            } as CustomDataPart);
-
-            lastStreamedOperationCount = operationCount;
-          }
-        }, 500); // Increased from 100ms to 500ms to prevent UI freezes
-
-        // Merge the agent's stream into our custom stream
+        // Merge the result stream into our custom stream
         writer.merge(
           result.toUIMessageStream({
             sendSources: false,
@@ -1040,7 +966,7 @@ export async function POST(req: Request) {
           }),
         );
 
-        // Wait for the stream to complete
+        // Wait for the stream to complete (no periodic updates - only final)
         try {
           await result.text; // text is a promise that resolves when streaming completes
         } catch (error: unknown) {
@@ -1049,32 +975,6 @@ export async function POST(req: Request) {
           } else {
             throw error;
           }
-        } finally {
-          clearInterval(intervalId);
-        }
-
-        // Send any remaining updates
-        if (operationCount > lastStreamedOperationCount) {
-          writer.write({
-            type: 'data-progress',
-            data: {
-              message: `Completed operation ${operationCount}`,
-              current: operationCount,
-              total: operationCount,
-              phase: 'processing',
-            },
-            transient: true,
-          } as CustomDataPart);
-
-          writer.write({
-            type: 'data-tables-batch',
-            id: `tables-update-${operationCount}`,
-            data: {
-              tables: cloneTables(schemaState),
-              batchNumber: operationCount,
-              isComplete: false,
-            },
-          } as CustomDataPart);
         }
 
         // Send final state
