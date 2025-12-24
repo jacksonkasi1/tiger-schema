@@ -1,7 +1,5 @@
 import {
   createParser,
-  ParsedEvent,
-  ReconnectInterval,
 } from 'eventsource-parser';
 
 export type ChatGPTAgent = 'user' | 'system' | 'assistant';
@@ -46,9 +44,10 @@ export async function OpenAIStream(
 
   const stream = new ReadableStream({
     async start(controller) {
-      // callback
-      function onParse(event: ParsedEvent | ReconnectInterval) {
-        if (event.type === 'event') {
+      // stream response (SSE) from OpenAI may be fragmented into multiple chunks
+      // this ensures we properly read chunks and invoke an event for each SSE event stream
+      const parser = createParser({
+        onEvent(event) {
           const data = event.data;
           // https://platform.openai.com/docs/api-reference/chat/create
           if (data === '[DONE]') {
@@ -69,12 +68,9 @@ export async function OpenAIStream(
             // maybe parse error
             controller.error(e);
           }
-        }
-      }
+        },
+      });
 
-      // stream response (SSE) from OpenAI may be fragmented into multiple chunks
-      // this ensures we properly read chunks and invoke an event for each SSE event stream
-      const parser = createParser(onParse);
       // https://web.dev/streams/#asynchronous-iteration
       const body = res.body;
       if (!body) {
