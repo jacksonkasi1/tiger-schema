@@ -7,6 +7,7 @@ import type {
   StreamingTablesBatch,
   StreamingNotification,
   StreamingOperationHistory,
+  OperationRecord,
 } from '@/lib/types';
 
 // ** import core packages
@@ -64,6 +65,9 @@ import {
   User,
   Copy,
   ExternalLink,
+  Undo2,
+  Redo2,
+  History,
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import {
@@ -72,6 +76,12 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip';
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover';
+import { ScrollArea } from '@/components/ui/scroll-area';
 import { MarkdownText } from '@/components/ui/markdown-text';
 
 interface ChatSidebarProps {
@@ -416,6 +426,12 @@ export function ChatSidebar({
   // Streaming progress state
   const [streamingProgress, setStreamingProgress] =
     useState<StreamingProgress | null>(null);
+
+  // Operation history for undo/redo (Phase 5.2)
+  const [operationHistory, setOperationHistory] = useState<OperationRecord[]>(
+    [],
+  );
+  const [historyIndex, setHistoryIndex] = useState(-1);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -535,8 +551,9 @@ export function ChatSidebar({
             'operations, canUndo:',
             historyData.canUndo,
           );
-          // TODO: Store operation history in state for future undo/redo implementation
-          // This data contains before/after state for each operation
+          // Store operation history for undo/redo
+          setOperationHistory((prev) => [...prev, ...historyData.operations]);
+          setHistoryIndex((prev) => prev + historyData.operations.length);
           break;
         }
       }
@@ -647,6 +664,57 @@ export function ChatSidebar({
     setStreamingProgress(null);
     toast.info('Operation cancelled');
   }, [stop]);
+
+  // Undo/Redo handlers (Phase 5.2)
+  const canUndo = historyIndex >= 0 && operationHistory.length > 0;
+  const canRedo =
+    historyIndex < operationHistory.length - 1 && operationHistory.length > 0;
+
+  const handleUndo = useCallback(() => {
+    if (!canUndo) return;
+
+    const operation = operationHistory[historyIndex];
+    if (operation.before) {
+      // Restore the previous state
+      const newTables = { ...tables };
+      if (operation.type === 'dropTable' && operation.before) {
+        // Restore dropped table
+        newTables[operation.tableId] = operation.before;
+      } else if (operation.type === 'createTable') {
+        // Remove created table
+        delete newTables[operation.tableId];
+      } else if (operation.before) {
+        // Restore previous state
+        newTables[operation.tableId] = operation.before;
+      }
+      updateTablesFromAI(newTables);
+      setHistoryIndex((prev) => prev - 1);
+      toast.info(`Undone: ${operation.description}`);
+    }
+  }, [canUndo, historyIndex, operationHistory, tables, updateTablesFromAI]);
+
+  const handleRedo = useCallback(() => {
+    if (!canRedo) return;
+
+    const operation = operationHistory[historyIndex + 1];
+    if (operation.after) {
+      // Apply the operation again
+      const newTables = { ...tables };
+      if (operation.type === 'dropTable') {
+        delete newTables[operation.tableId];
+      } else if (operation.after) {
+        newTables[operation.tableId] = operation.after;
+      }
+      updateTablesFromAI(newTables);
+      setHistoryIndex((prev) => prev + 1);
+      toast.info(`Redone: ${operation.description}`);
+    }
+  }, [canRedo, historyIndex, operationHistory, tables, updateTablesFromAI]);
+
+  const clearHistory = useCallback(() => {
+    setOperationHistory([]);
+    setHistoryIndex(-1);
+  }, []);
 
   const listOfTables = useMemo(() => {
     const authUserTable: Table = {
@@ -808,7 +876,103 @@ export function ChatSidebar({
                   </Badge>
                 )}
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1">
+                {/* Undo/Redo buttons (Phase 5.2) */}
+                {operationHistory.length > 0 && (
+                  <TooltipProvider delayDuration={0}>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={handleUndo}
+                          disabled={!canUndo}
+                          className="h-8 w-8"
+                        >
+                          <Undo2 size={16} />
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent>Undo</TooltipContent>
+                    </Tooltip>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={handleRedo}
+                          disabled={!canRedo}
+                          className="h-8 w-8"
+                        >
+                          <Redo2 size={16} />
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent>Redo</TooltipContent>
+                    </Tooltip>
+                    {/* History dropdown */}
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <Button variant="ghost" size="icon" className="h-8 w-8">
+                          <History size={16} />
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent
+                        align="end"
+                        className="w-72 p-0"
+                        sideOffset={8}
+                      >
+                        <div className="flex items-center justify-between p-3 border-b">
+                          <span className="text-sm font-medium">
+                            Operation History
+                          </span>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={clearHistory}
+                            className="h-7 text-xs text-muted-foreground"
+                          >
+                            Clear
+                          </Button>
+                        </div>
+                        <ScrollArea className="h-[200px]">
+                          {operationHistory.length === 0 ? (
+                            <div className="p-4 text-sm text-muted-foreground text-center">
+                              No operations yet
+                            </div>
+                          ) : (
+                            <div className="p-2 space-y-1">
+                              {operationHistory.map((op, idx) => (
+                                <div
+                                  key={op.id}
+                                  className={cn(
+                                    'text-xs p-2 rounded-md',
+                                    idx <= historyIndex
+                                      ? 'bg-muted'
+                                      : 'bg-muted/30 text-muted-foreground',
+                                  )}
+                                >
+                                  <div className="flex items-center gap-2">
+                                    <Badge
+                                      variant="outline"
+                                      className="text-[10px] h-4"
+                                    >
+                                      {op.type}
+                                    </Badge>
+                                    <span className="truncate flex-1">
+                                      {op.tableId}
+                                    </span>
+                                  </div>
+                                  <div className="text-muted-foreground mt-1 truncate">
+                                    {op.description}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </ScrollArea>
+                      </PopoverContent>
+                    </Popover>
+                  </TooltipProvider>
+                )}
                 {messages.length > 0 && (
                   <TooltipProvider>
                     <Tooltip>
@@ -823,7 +987,7 @@ export function ChatSidebar({
                         </Button>
                       </TooltipTrigger>
                       <TooltipContent>
-                        <p>Clear Chat History</p>
+                        <p>Clear Chat</p>
                       </TooltipContent>
                     </Tooltip>
                   </TooltipProvider>
