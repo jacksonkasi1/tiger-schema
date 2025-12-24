@@ -674,41 +674,80 @@ export function ChatSidebar({
     if (!canUndo) return;
 
     const operation = operationHistory[historyIndex];
-    if (operation.before) {
-      // Restore the previous state
-      const newTables = { ...tables };
-      if (operation.type === 'dropTable' && operation.before) {
-        // Restore dropped table
-        newTables[operation.tableId] = operation.before;
-      } else if (operation.type === 'createTable') {
-        // Remove created table
+    const newTables = { ...tables };
+
+    // Handle different operation types
+    switch (operation.type) {
+      case 'createTable':
+        // Undo create = delete the table
         delete newTables[operation.tableId];
-      } else if (operation.before) {
-        // Restore previous state
-        newTables[operation.tableId] = operation.before;
-      }
-      updateTablesFromAI(newTables);
-      setHistoryIndex((prev) => prev - 1);
-      toast.info(`Undone: ${operation.description}`);
+        break;
+      case 'dropTable':
+        // Undo drop = restore the table (before state)
+        if (operation.before) {
+          newTables[operation.tableId] = operation.before;
+        }
+        break;
+      case 'renameTable':
+        // Undo rename = restore old table ID with before state
+        if (operation.before) {
+          // Find and remove the renamed table, restore original
+          delete newTables[operation.tableId];
+          // The before state has the original table data
+          const originalId = operation.before.title || operation.tableId;
+          newTables[originalId] = operation.before;
+        }
+        break;
+      default:
+        // For addColumn, dropColumn, alterColumn - restore before state
+        if (operation.before) {
+          newTables[operation.tableId] = operation.before;
+        }
+        break;
     }
+
+    updateTablesFromAI(newTables);
+    setHistoryIndex((prev) => prev - 1);
+    toast.info(`Undone: ${operation.description}`);
   }, [canUndo, historyIndex, operationHistory, tables, updateTablesFromAI]);
 
   const handleRedo = useCallback(() => {
     if (!canRedo) return;
 
     const operation = operationHistory[historyIndex + 1];
-    if (operation.after) {
-      // Apply the operation again
-      const newTables = { ...tables };
-      if (operation.type === 'dropTable') {
+    const newTables = { ...tables };
+
+    // Handle different operation types
+    switch (operation.type) {
+      case 'createTable':
+        // Redo create = add the table (after state)
+        if (operation.after) {
+          newTables[operation.tableId] = operation.after;
+        }
+        break;
+      case 'dropTable':
+        // Redo drop = delete the table
         delete newTables[operation.tableId];
-      } else if (operation.after) {
-        newTables[operation.tableId] = operation.after;
-      }
-      updateTablesFromAI(newTables);
-      setHistoryIndex((prev) => prev + 1);
-      toast.info(`Redone: ${operation.description}`);
+        break;
+      case 'renameTable':
+        // Redo rename = apply the new table with after state
+        if (operation.after && operation.before) {
+          const originalId = operation.before.title || operation.tableId;
+          delete newTables[originalId];
+          newTables[operation.tableId] = operation.after;
+        }
+        break;
+      default:
+        // For addColumn, dropColumn, alterColumn - apply after state
+        if (operation.after) {
+          newTables[operation.tableId] = operation.after;
+        }
+        break;
     }
+
+    updateTablesFromAI(newTables);
+    setHistoryIndex((prev) => prev + 1);
+    toast.info(`Redone: ${operation.description}`);
   }, [canRedo, historyIndex, operationHistory, tables, updateTablesFromAI]);
 
   const clearHistory = useCallback(() => {
