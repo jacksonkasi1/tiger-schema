@@ -90,10 +90,35 @@ const columnInputSchema = z.object({
   default: z.any().optional(),
   required: z.boolean().optional(),
   pk: z.boolean().optional(),
-  fk: z.string().optional(),
+  fk: z
+    .string()
+    .optional()
+    .describe(
+      'Foreign key reference in format "table.column" (e.g., "users.id", "products.id")',
+    ),
   enumValues: z.array(z.string()).optional(),
   enumTypeName: z.string().optional(),
   comment: z.string().optional(),
+});
+
+// Tool to set foreign key on existing column
+const setForeignKeyParams = z.object({
+  tableId: z.string().min(1).describe('The table containing the column'),
+  columnName: z.string().min(1).describe('The column to set FK on'),
+  referencesTable: z
+    .string()
+    .min(1)
+    .describe('The table being referenced (e.g., "users")'),
+  referencesColumn: z
+    .string()
+    .min(1)
+    .describe('The column being referenced (e.g., "id")'),
+});
+
+// Tool to remove foreign key from column
+const removeForeignKeyParams = z.object({
+  tableId: z.string().min(1).describe('The table containing the column'),
+  columnName: z.string().min(1).describe('The column to remove FK from'),
 });
 
 // Atomic tool params - one operation at a time
@@ -185,77 +210,96 @@ const normaliseColumn = (col: z.infer<typeof columnInputSchema>): Column => {
 
 const SYSTEM_PROMPT = `You are a PostgreSQL schema assistant with FULL CONTEXT of all database operations.
 
-**CRITICAL: WORK INCREMENTALLY - LIKE A PROFESSIONAL IDE**
-You MUST process schema changes ONE TABLE AT A TIME. This prevents browser freezes and provides real-time feedback.
+**CRITICAL: FOREIGN KEY RELATIONSHIPS ARE MANDATORY**
+When creating related tables, you MUST ALWAYS include foreign key (fk) properties on columns that reference other tables.
 
-**MANDATORY INCREMENTAL WORKFLOW:**
-1. For EACH table modification, make a SEPARATE tool call
-2. After EACH tool call, the result is streamed to the user immediately
-3. Continue calling tools until ALL changes are complete
-4. NEVER try to batch multiple table creations in your response
+**FOREIGN KEY FORMAT:**
+- Use the \`fk\` property on any column that references another table
+- Format: "referenced_table.referenced_column" (e.g., "users.id", "products.id")
+- FK columns should match the type of the referenced column (usually integer for id)
 
-**EXAMPLE - Creating a blog schema:**
-User: "Create a blog with users, posts, and comments"
+**EXAMPLE - E-commerce Schema with Proper Relationships:**
+\`\`\`
+// Step 1: Create products table (no FKs - it's a root table)
+createTable({
+  tableId: "products",
+  columns: [
+    { title: "id", type: "integer", pk: true },
+    { title: "name", type: "string" },
+    { title: "price", type: "number" }
+  ]
+})
 
-✅ CORRECT (3 separate tool calls):
-Step 1: "I'll create the tables one by one. Starting with users..."
-→ createTable({tableId: "users", columns: [...]})
+// Step 2: Create customers table (no FKs - it's a root table)
+createTable({
+  tableId: "customers",
+  columns: [
+    { title: "id", type: "integer", pk: true },
+    { title: "email", type: "string" }
+  ]
+})
 
-Step 2: "Users table created. Now creating posts..."
-→ createTable({tableId: "posts", columns: [...]})
+// Step 3: Create orders table WITH FK to customers
+createTable({
+  tableId: "orders",
+  columns: [
+    { title: "id", type: "integer", pk: true },
+    { title: "customer_id", type: "integer", fk: "customers.id" },  // ← FK HERE!
+    { title: "total", type: "number" }
+  ]
+})
 
-Step 3: "Posts table created. Finally, comments..."
-→ createTable({tableId: "comments", columns: [...]})
+// Step 4: Create order_items WITH FKs to orders AND products
+createTable({
+  tableId: "order_items",
+  columns: [
+    { title: "id", type: "integer", pk: true },
+    { title: "order_id", type: "integer", fk: "orders.id" },       // ← FK HERE!
+    { title: "product_id", type: "integer", fk: "products.id" },   // ← FK HERE!
+    { title: "quantity", type: "integer" }
+  ]
+})
+\`\`\`
 
-Step 4: "Done! Created 3 tables: users (4 columns), posts (5 columns), comments (4 columns)."
+**CRITICAL RULES FOR RELATIONSHIPS:**
+1. ALWAYS create parent tables BEFORE child tables (e.g., users before posts)
+2. ALWAYS include \`fk: "table.column"\` on columns that reference other tables
+3. Common FK patterns:
+   - \`user_id\` → \`fk: "users.id"\`
+   - \`customer_id\` → \`fk: "customers.id"\`
+   - \`product_id\` → \`fk: "products.id"\`
+   - \`order_id\` → \`fk: "orders.id"\`
+   - \`category_id\` → \`fk: "categories.id"\`
+   - \`parent_id\` → \`fk: "same_table.id"\` (self-reference)
 
-❌ WRONG: Trying to describe all tables in one giant response
-
-**AVAILABLE ATOMIC TOOLS:**
-- listTables: Get all tables. Use includeColumns:true for full details
+**AVAILABLE TOOLS:**
+- listTables: Get all tables (use includeColumns:true for full details)
 - getTableDetails: Get specific table details
 - listSchemas: List database schemas
-- createTable: Create ONE table (call multiple times for multiple tables)
+- createTable: Create ONE table with columns (include fk on relationship columns!)
 - dropTable: Drop ONE table
 - renameTable: Rename ONE table
-- addColumn: Add ONE column to a table
-- dropColumn: Remove ONE column from a table
-- alterColumn: Modify ONE column in a table
+- addColumn: Add ONE column to a table (can include fk)
+- dropColumn: Remove ONE column
+- alterColumn: Modify ONE column (can add/change fk)
+- setForeignKey: Add FK to existing column
+- removeForeignKey: Remove FK from column
 
-**FK RELATIONSHIP DETECTION:**
-Column foreign keys are in the fk property: { title: "user_id", fk: "users.id" }
-When deleting a table with dependents, drop dependent tables FIRST (one at a time).
+**WORKFLOW:**
+1. Create tables ONE AT A TIME
+2. Create parent/root tables FIRST (no FKs)
+3. Create child tables AFTER with proper FKs
+4. If user asks about missing relationships, use setForeignKey tool
 
-**STEP-BY-STEP PROGRESS:**
-- Always explain what you're doing at each step
-- Announce before each tool call: "Creating X table..." or "Adding Y column..."
-- After completion, summarize: "Created X with N columns"
-- For bulk operations, show progress: "Table 1/5 complete..."
-
-**OPTIMAL PATTERNS:**
-
-For simple queries:
-User: "list tables"
-→ listTables()
-Response: "You have 8 tables: users, posts, comments..."
-
-For modifications:
-User: "add email column to users"
-→ addColumn({tableId: "users", column: {title: "email", type: "string", format: "varchar"}})
-Response: "Added email column (varchar) to users table."
-
-For bulk operations:
-User: "add created_at and updated_at to all tables"
-1. listTables({includeColumns: true}) - "Let me check your tables..."
-2. For EACH table, call addColumn separately
-3. Provide running summary: "Added timestamps to users (1/4)... posts (2/4)..."
+**CHECKING EXISTING RELATIONSHIPS:**
+When user asks about relationships or FKs, use listTables({includeColumns: true}) to see current state.
+The fk property on columns shows existing relationships.
 
 **REMEMBER:**
 - ONE table operation per tool call
-- Stream results after each operation
-- Be efficient but incremental
-- Trust your tool results completely
-- Always explain your actions clearly`;
+- ALWAYS include fk property for relationship columns
+- Create parent tables before child tables
+- Verify relationships are set up correctly`;
 
 // Generate unique operation ID
 const generateOperationId = () =>
@@ -680,7 +724,8 @@ export async function POST(req: Request) {
       }),
 
       alterColumn: tool({
-        description: 'Modify properties of a single column.',
+        description:
+          'Modify properties of a single column. Can add/change/remove fk property.',
         inputSchema: alterColumnParams,
         execute: async ({ tableId, columnName, patch }) => {
           if (abortController.signal.aborted) {
@@ -744,6 +789,135 @@ export async function POST(req: Request) {
             ok: true,
             message: `Updated column '${columnName}' in '${tableId}'`,
             changes: changedProps,
+          };
+        },
+      }),
+
+      setForeignKey: tool({
+        description:
+          'Set a foreign key relationship on an existing column. Use this to add FK to columns that should reference other tables.',
+        inputSchema: setForeignKeyParams,
+        execute: async ({
+          tableId,
+          columnName,
+          referencesTable,
+          referencesColumn,
+        }) => {
+          if (abortController.signal.aborted) {
+            return { ok: false, message: 'Operation cancelled' };
+          }
+
+          const table = schemaState[tableId];
+          if (!table) {
+            return {
+              ok: false,
+              message: `Table '${tableId}' not found`,
+            };
+          }
+
+          const columnIndex = (table.columns || []).findIndex(
+            (c) => c.title === columnName,
+          );
+
+          if (columnIndex === -1) {
+            return {
+              ok: false,
+              message: `Column '${columnName}' not found in '${tableId}'`,
+            };
+          }
+
+          // Check if referenced table exists
+          if (!schemaState[referencesTable]) {
+            return {
+              ok: false,
+              message: `Referenced table '${referencesTable}' not found. Create it first.`,
+            };
+          }
+
+          operationCount++;
+          const beforeState = cloneTable(table);
+
+          const fkValue = `${referencesTable}.${referencesColumn}`;
+          table.columns![columnIndex] = {
+            ...table.columns![columnIndex],
+            fk: fkValue,
+          };
+
+          // Record operation for undo
+          recordOperation(
+            'alterColumn',
+            tableId,
+            beforeState,
+            table,
+            `Set FK on '${tableId}.${columnName}' → '${fkValue}'`,
+          );
+
+          return {
+            ok: true,
+            message: `Set foreign key: ${tableId}.${columnName} → ${fkValue}`,
+            column: columnName,
+            references: fkValue,
+          };
+        },
+      }),
+
+      removeForeignKey: tool({
+        description: 'Remove a foreign key relationship from a column.',
+        inputSchema: removeForeignKeyParams,
+        execute: async ({ tableId, columnName }) => {
+          if (abortController.signal.aborted) {
+            return { ok: false, message: 'Operation cancelled' };
+          }
+
+          const table = schemaState[tableId];
+          if (!table) {
+            return {
+              ok: false,
+              message: `Table '${tableId}' not found`,
+            };
+          }
+
+          const columnIndex = (table.columns || []).findIndex(
+            (c) => c.title === columnName,
+          );
+
+          if (columnIndex === -1) {
+            return {
+              ok: false,
+              message: `Column '${columnName}' not found in '${tableId}'`,
+            };
+          }
+
+          const currentFk = table.columns![columnIndex].fk;
+          if (!currentFk) {
+            return {
+              ok: false,
+              message: `Column '${columnName}' has no foreign key to remove`,
+            };
+          }
+
+          operationCount++;
+          const beforeState = cloneTable(table);
+
+          table.columns![columnIndex] = {
+            ...table.columns![columnIndex],
+            fk: undefined,
+          };
+
+          // Record operation for undo
+          recordOperation(
+            'alterColumn',
+            tableId,
+            beforeState,
+            table,
+            `Removed FK from '${tableId}.${columnName}'`,
+          );
+
+          return {
+            ok: true,
+            message: `Removed foreign key from ${tableId}.${columnName} (was: ${currentFk})`,
+            column: columnName,
+            previousFk: currentFk,
           };
         },
       }),
