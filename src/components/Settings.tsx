@@ -99,6 +99,9 @@ export function Settings({
     [],
   );
 
+  // Max steps for AI agent (user-configurable, default 50)
+  const [maxSteps, setMaxSteps] = useLocalStorage<number>('ai-max-steps', 50);
+
   const [isFetchingModels, setIsFetchingModels] = useState(false);
   const [customModelInput, setCustomModelInput] = useState('');
 
@@ -325,7 +328,7 @@ export function Settings({
                 className={cn(
                   'text-xs truncate cursor-pointer',
                   m.enabled === false &&
-                    'text-muted-foreground line-through opacity-70',
+                  'text-muted-foreground line-through opacity-70',
                 )}
               >
                 {m.name}
@@ -736,6 +739,31 @@ export function Settings({
                     </div>
                   </div>
                 )}
+
+                {/* Max Agent Steps Setting */}
+                <div className="space-y-3 border-t border-border/50 pt-4 mt-4">
+                  <div className="flex items-center justify-between">
+                    <Label htmlFor="max-steps" className="text-sm font-medium">
+                      Max Agent Steps
+                    </Label>
+                    <span className="text-xs text-muted-foreground font-mono bg-muted px-2 py-0.5 rounded">
+                      {maxSteps}
+                    </span>
+                  </div>
+                  <Input
+                    id="max-steps"
+                    type="range"
+                    min={10}
+                    max={100}
+                    step={10}
+                    value={maxSteps}
+                    onChange={(e) => setMaxSteps(parseInt(e.target.value))}
+                    className="w-full cursor-pointer"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Maximum tool executions per request. Default: 50
+                  </p>
+                </div>
               </div>
             </div>
           </SheetContent>
