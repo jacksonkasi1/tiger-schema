@@ -114,6 +114,15 @@ interface AppState {
   // Enum types
   enumTypes: Record<string, EnumTypeDefinition>;
   setEnumTypes: (types: Record<string, EnumTypeDefinition>) => void;
+  updateEnumType: (enumKey: string, values: string[]) => void;
+  createEnumType: (
+    name: string,
+    schema: string | undefined,
+    values: string[],
+  ) => void;
+  deleteEnumType: (enumKey: string) => void;
+  renameEnumType: (oldKey: string, newName: string) => void;
+  getEnumType: (enumKey: string) => EnumTypeDefinition | undefined;
 }
 
 const checkView = (title: string, paths: any) => {
@@ -953,6 +962,159 @@ export const useStore = create<AppState>((set, get) => {
     setEnumTypes: (types) => {
       set({ enumTypes: types });
       get().saveToLocalStorage();
+    },
+
+    updateEnumType: (enumKey, values) => {
+      const state = get();
+      const existingEnum = state.enumTypes[enumKey];
+      if (!existingEnum) return;
+
+      // Update the enum type definition
+      const updatedEnumTypes = {
+        ...state.enumTypes,
+        [enumKey]: {
+          ...existingEnum,
+          values,
+        },
+      };
+
+      // Update all columns that reference this enum type
+      const updatedTables = { ...state.tables };
+      Object.entries(updatedTables).forEach(([tableId, table]) => {
+        if (!table.columns) return;
+        const updatedColumns = table.columns.map((col) => {
+          if (
+            col.enumTypeName === enumKey ||
+            col.enumTypeName === existingEnum.name
+          ) {
+            return {
+              ...col,
+              enumValues: values,
+            };
+          }
+          return col;
+        });
+        updatedTables[tableId] = {
+          ...table,
+          columns: updatedColumns,
+        };
+      });
+
+      set({
+        enumTypes: updatedEnumTypes,
+        tables: updatedTables,
+      });
+      get().saveToLocalStorage();
+    },
+
+    createEnumType: (name, schema, values) => {
+      const enumKey = schema ? `${schema}.${name}` : name;
+      const newEnum: EnumTypeDefinition = {
+        name,
+        schema,
+        values,
+      };
+
+      set((state) => ({
+        enumTypes: {
+          ...state.enumTypes,
+          [enumKey]: newEnum,
+        },
+      }));
+      get().saveToLocalStorage();
+    },
+
+    deleteEnumType: (enumKey) => {
+      const state = get();
+      const enumToDelete = state.enumTypes[enumKey];
+      if (!enumToDelete) return;
+
+      // Remove from enumTypes
+      const { [enumKey]: _, ...remainingEnums } = state.enumTypes;
+
+      // Clear enum references from columns using this type
+      const updatedTables = { ...state.tables };
+      Object.entries(updatedTables).forEach(([tableId, table]) => {
+        if (!table.columns) return;
+        const updatedColumns = table.columns.map((col) => {
+          if (
+            col.enumTypeName === enumKey ||
+            col.enumTypeName === enumToDelete.name
+          ) {
+            return {
+              ...col,
+              format: 'varchar',
+              type: 'string',
+              enumTypeName: undefined,
+              enumValues: undefined,
+            };
+          }
+          return col;
+        });
+        updatedTables[tableId] = {
+          ...table,
+          columns: updatedColumns,
+        };
+      });
+
+      set({
+        enumTypes: remainingEnums,
+        tables: updatedTables,
+      });
+      get().saveToLocalStorage();
+    },
+
+    renameEnumType: (oldKey, newName) => {
+      const state = get();
+      const existingEnum = state.enumTypes[oldKey];
+      if (!existingEnum) return;
+
+      // Determine new key
+      const newKey = existingEnum.schema
+        ? `${existingEnum.schema}.${newName}`
+        : newName;
+
+      // Create updated enum with new name
+      const { [oldKey]: _, ...remainingEnums } = state.enumTypes;
+      const updatedEnumTypes = {
+        ...remainingEnums,
+        [newKey]: {
+          ...existingEnum,
+          name: newName,
+        },
+      };
+
+      // Update all columns that reference this enum type
+      const updatedTables = { ...state.tables };
+      Object.entries(updatedTables).forEach(([tableId, table]) => {
+        if (!table.columns) return;
+        const updatedColumns = table.columns.map((col) => {
+          if (
+            col.enumTypeName === oldKey ||
+            col.enumTypeName === existingEnum.name
+          ) {
+            return {
+              ...col,
+              enumTypeName: newKey,
+            };
+          }
+          return col;
+        });
+        updatedTables[tableId] = {
+          ...table,
+          columns: updatedColumns,
+        };
+      });
+
+      set({
+        enumTypes: updatedEnumTypes,
+        tables: updatedTables,
+      });
+      get().saveToLocalStorage();
+    },
+
+    getEnumType: (enumKey) => {
+      return get().enumTypes[enumKey];
     },
 
     clearCache: () => {

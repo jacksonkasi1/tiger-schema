@@ -42,13 +42,14 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
+
 import {
   ChevronDown,
   ChevronRight,
   GripVertical,
   Key,
   Sparkles,
-  Search, // Changed from Search as SearchIcon
+  Search,
   Circle,
   MoreVertical,
   Plus,
@@ -57,10 +58,13 @@ import {
   Check,
   ChevronsUpDown,
   Pencil,
+  List,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
+import { EnumValuesPopover } from './EnumValuesPopover';
+import { EnumEditorPopover } from './EnumEditorPopover';
 
 interface TableCollapsibleProps {
   tableId: string;
@@ -112,6 +116,7 @@ type IndexType = 'primary_key' | 'unique_key' | 'index' | 'none';
 export function TableCollapsible({ tableId }: TableCollapsibleProps) {
   const {
     tables,
+    enumTypes,
     expandedTables,
     toggleTableExpanded,
     updateColumn,
@@ -121,6 +126,7 @@ export function TableCollapsible({ tableId }: TableCollapsibleProps) {
     triggerFocusTable,
     updateTableColor,
     updateTableName,
+    updateEnumType,
   } = useStore();
 
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
@@ -341,20 +347,44 @@ export function TableCollapsible({ tableId }: TableCollapsibleProps) {
               {/* Columns List */}
               <div className="py-0.5">
                 {table.columns && table.columns.length > 0 ? (
-                  table.columns.map((column, index) => (
-                    <ColumnRow
-                      key={`${tableId}-col-${index}`}
-                      tableId={tableId}
-                      column={column}
-                      columnIndex={index}
-                      indexType={getIndexType(column)}
-                      onIndexTypeChange={handleIndexTypeChange}
-                      onUpdate={(updates) =>
-                        updateColumn(tableId, index, updates)
+                  table.columns.map((column, index) => {
+                    // Get enum values from enumTypes store or column
+                    const getEnumValues = (): string[] => {
+                      if (
+                        column.enumTypeName &&
+                        enumTypes[column.enumTypeName]
+                      ) {
+                        return enumTypes[column.enumTypeName].values;
                       }
-                      onDelete={() => deleteColumn(tableId, index)}
-                    />
-                  ))
+                      return column.enumValues || [];
+                    };
+
+                    // Handle saving enum values
+                    const handleSaveEnumValues = (newValues: string[]) => {
+                      if (column.enumTypeName) {
+                        updateEnumType(column.enumTypeName, newValues);
+                      } else {
+                        updateColumn(tableId, index, { enumValues: newValues });
+                      }
+                    };
+
+                    return (
+                      <ColumnRow
+                        key={`${tableId}-col-${index}`}
+                        tableId={tableId}
+                        column={column}
+                        columnIndex={index}
+                        indexType={getIndexType(column)}
+                        onIndexTypeChange={handleIndexTypeChange}
+                        onUpdate={(updates) =>
+                          updateColumn(tableId, index, updates)
+                        }
+                        onDelete={() => deleteColumn(tableId, index)}
+                        enumValues={getEnumValues()}
+                        onSaveEnumValues={handleSaveEnumValues}
+                      />
+                    );
+                  })
                 ) : (
                   <div className="text-center py-4 text-xs text-muted-foreground">
                     No columns yet
@@ -455,6 +485,8 @@ interface ColumnRowProps {
   onIndexTypeChange: (columnIndex: number, indexType: IndexType) => void;
   onUpdate: (updates: Partial<Column>) => void;
   onDelete: () => void;
+  enumValues: string[];
+  onSaveEnumValues: (values: string[]) => void;
 }
 
 function ColumnRow({
@@ -464,8 +496,23 @@ function ColumnRow({
   onIndexTypeChange,
   onUpdate,
   onDelete,
+  enumValues,
+  onSaveEnumValues,
 }: ColumnRowProps) {
   const [typeOpen, setTypeOpen] = useState(false);
+  const [enumEditorOpen, setEnumEditorOpen] = useState(false);
+
+  const isEnumColumn = column.format === 'enum' || column.enumTypeName;
+
+  const getTypeDisplayText = () => {
+    if (isEnumColumn && column.enumTypeName) {
+      const displayName = column.enumTypeName.includes('.')
+        ? column.enumTypeName.split('.').pop()
+        : column.enumTypeName;
+      return `${displayName}${column.isArray ? '[]' : ''}`;
+    }
+    return `${column.format || column.type || 'varchar'}${column.isArray ? '[]' : ''}`;
+  };
 
   return (
     <div className="group flex items-center gap-1.5 px-2 py-0.5 hover:bg-muted/30 transition-colors">
@@ -531,59 +578,96 @@ function ColumnRow({
         placeholder="column_name"
       />
 
-      {/* Data Type Combobox - Subtle styling */}
-      <Popover open={typeOpen} onOpenChange={setTypeOpen}>
-        <PopoverTrigger asChild>
-          <Button
-            variant="outline"
-            role="combobox"
-            aria-expanded={typeOpen}
-            className="h-6 w-[100px] justify-between text-[11px] font-mono px-1.5 bg-muted/20 border-border/30 hover:bg-muted/40 hover:border-border/50"
-          >
-            <span className="truncate">
-              {column.format || column.type || 'varchar'}
-            </span>
-            <ChevronsUpDown className="ml-1 h-2.5 w-2.5 shrink-0 opacity-50" />
-          </Button>
-        </PopoverTrigger>
-        <PopoverContent
-          className="w-[200px] p-0 border-border/40 shadow-lg"
-          align="end"
-        >
-          <Command className="bg-popover">
-            <CommandInput
-              placeholder="Search type..."
-              className="h-8 text-xs font-mono border-0"
-            />
-            <CommandEmpty className="py-2 text-xs text-muted-foreground text-center">
-              No type found.
-            </CommandEmpty>
-            <CommandGroup className="max-h-[200px] overflow-auto p-1">
-              {POSTGRES_TYPES.map((type) => (
-                <CommandItem
-                  key={type}
-                  value={type}
-                  onSelect={() => {
-                    onUpdate({ format: type });
-                    setTypeOpen(false);
-                  }}
-                  className="text-xs font-mono aria-selected:bg-primary/10 aria-selected:text-primary rounded-sm py-1.5 px-2"
-                >
-                  <Check
-                    className={cn(
-                      'mr-2 h-3 w-3 text-primary',
-                      (column.format || column.type) === type
-                        ? 'opacity-100'
-                        : 'opacity-0',
-                    )}
-                  />
-                  {type}
-                </CommandItem>
-              ))}
-            </CommandGroup>
-          </Command>
-        </PopoverContent>
-      </Popover>
+      {/* Data Type Combobox - With Enum Support */}
+      <div className="flex items-center gap-0.5">
+        {isEnumColumn && enumValues.length > 0 ? (
+          <EnumValuesPopover
+            enumTypeName={column.enumTypeName || 'enum'}
+            enumValues={enumValues}
+            isArray={column.isArray}
+            trigger={
+              <Button
+                variant="outline"
+                role="combobox"
+                className="h-6 w-[100px] justify-between text-[11px] font-mono px-1.5 bg-muted/20 border-border/30 hover:bg-muted/40 hover:border-border/50"
+              >
+                <span className="truncate flex items-center gap-1">
+                  <List className="h-2.5 w-2.5 text-purple-500" />
+                  {getTypeDisplayText()}
+                </span>
+                <ChevronsUpDown className="ml-1 h-2.5 w-2.5 shrink-0 opacity-50" />
+              </Button>
+            }
+          />
+        ) : (
+          <Popover open={typeOpen} onOpenChange={setTypeOpen}>
+            <PopoverTrigger asChild>
+              <Button
+                variant="outline"
+                role="combobox"
+                aria-expanded={typeOpen}
+                className="h-6 w-[100px] justify-between text-[11px] font-mono px-1.5 bg-muted/20 border-border/30 hover:bg-muted/40 hover:border-border/50"
+              >
+                <span className="truncate">{getTypeDisplayText()}</span>
+                <ChevronsUpDown className="ml-1 h-2.5 w-2.5 shrink-0 opacity-50" />
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent
+              className="w-[200px] p-0 border-border/40 shadow-lg"
+              align="end"
+            >
+              <Command className="bg-popover">
+                <CommandInput
+                  placeholder="Search type..."
+                  className="h-8 text-xs font-mono border-0"
+                />
+                <CommandEmpty className="py-2 text-xs text-muted-foreground text-center">
+                  No type found.
+                </CommandEmpty>
+                <CommandGroup className="max-h-[200px] overflow-auto p-1">
+                  {POSTGRES_TYPES.map((type) => (
+                    <CommandItem
+                      key={type}
+                      value={type}
+                      onSelect={() => {
+                        onUpdate({ format: type });
+                        setTypeOpen(false);
+                      }}
+                      className="text-xs font-mono aria-selected:bg-primary/10 aria-selected:text-primary rounded-sm py-1.5 px-2"
+                    >
+                      <Check
+                        className={cn(
+                          'mr-2 h-3 w-3 text-primary',
+                          (column.format || column.type) === type
+                            ? 'opacity-100'
+                            : 'opacity-0',
+                        )}
+                      />
+                      {type}
+                    </CommandItem>
+                  ))}
+                </CommandGroup>
+              </Command>
+            </PopoverContent>
+          </Popover>
+        )}
+
+        {/* Enum Edit Button */}
+        {isEnumColumn && (
+          <EnumEditorPopover
+            enumTypeName={column.enumTypeName || 'enum'}
+            currentValues={enumValues}
+            onSave={onSaveEnumValues}
+            open={enumEditorOpen}
+            onOpenChange={setEnumEditorOpen}
+            trigger={
+              <button className="h-5 w-5 flex items-center justify-center rounded transition-all duration-150 hover:bg-muted/50 text-muted-foreground/50 hover:text-purple-500">
+                <Pencil className="h-2.5 w-2.5" />
+              </button>
+            }
+          />
+        )}
+      </div>
 
       {/* NULL/NOT NULL Chip - Subtle styling */}
       <button

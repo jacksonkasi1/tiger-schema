@@ -42,9 +42,9 @@ export function generateSQLSchema(tables: TableState): string {
       const parts = typeName.split('.');
       const enumName = parts.length > 1 ? parts[1] : typeName;
       const schemaPrefix = parts.length > 1 ? `${parts[0]}.` : '';
-      
+
       sql += `CREATE TYPE ${schemaPrefix}"${enumName}" AS ENUM (`;
-      sql += values.map(v => `'${v}'`).join(', ');
+      sql += values.map((v) => `'${v}'`).join(', ');
       sql += `);\n`;
     });
     sql += '\n';
@@ -54,10 +54,11 @@ export function generateSQLSchema(tables: TableState): string {
   const dependencies: Record<string, string[]> = {};
 
   Object.entries(tables).forEach(([table, value]) => {
-    dependencies[table] = value.columns
-      ?.map((v) => v.fk?.split('.')[0])
-      .filter((v) => typeof v === 'string')
-      .filter((v) => table !== v) || [];
+    dependencies[table] =
+      value.columns
+        ?.map((v) => v.fk?.split('.')[0])
+        .filter((v) => typeof v === 'string')
+        .filter((v) => table !== v) || [];
   });
 
   // Topological sort to get correct table order
@@ -99,7 +100,11 @@ export function generateSQLSchema(tables: TableState): string {
 
     const columns = table.columns || [];
     const primaryKeys: string[] = [];
-    const foreignKeys: Array<{ column: string; refTable: string; refColumn: string }> = [];
+    const foreignKeys: Array<{
+      column: string;
+      refTable: string;
+      refColumn: string;
+    }> = [];
 
     columns.forEach((col, i) => {
       // Column name (with quotes if reserved keyword)
@@ -115,11 +120,16 @@ export function generateSQLSchema(tables: TableState): string {
       } else if (col.format === 'enum' && col.enumTypeName) {
         // Use the enum type name for enum columns
         const enumTypeParts = col.enumTypeName.split('.');
-        const enumName = enumTypeParts.length > 1 ? enumTypeParts[1] : col.enumTypeName;
-        const schemaPrefix = enumTypeParts.length > 1 ? `${enumTypeParts[0]}.` : '';
-        sql += ` ${schemaPrefix}"${enumName}"`;
+        const enumName =
+          enumTypeParts.length > 1 ? enumTypeParts[1] : col.enumTypeName;
+        const schemaPrefix =
+          enumTypeParts.length > 1 ? `${enumTypeParts[0]}.` : '';
+        const arraySuffix = col.isArray ? '[]' : '';
+        sql += ` ${schemaPrefix}"${enumName}"${arraySuffix}`;
       } else {
-        sql += ` ${col.format.toUpperCase()}`;
+        // Handle array types for non-enum columns
+        const arraySuffix = col.isArray ? '[]' : '';
+        sql += ` ${col.format.toUpperCase()}${arraySuffix}`;
       }
 
       // NOT NULL constraint
@@ -158,7 +168,7 @@ export function generateSQLSchema(tables: TableState): string {
 
     // Add ALTER TABLE for primary key
     if (primaryKeys.length > 0) {
-      sql += `ALTER TABLE "${tableName}" ADD PRIMARY KEY (${primaryKeys.map(pk => `"${pk}"`).join(', ')});\n`;
+      sql += `ALTER TABLE "${tableName}" ADD PRIMARY KEY (${primaryKeys.map((pk) => `"${pk}"`).join(', ')});\n`;
     }
 
     // Add ALTER TABLE for foreign keys
@@ -189,7 +199,10 @@ export function generateSQLSchema(tables: TableState): string {
 /**
  * Download SQL schema as a file
  */
-export function downloadSQLSchema(tables: TableState, filename: string = 'schema.sql'): void {
+export function downloadSQLSchema(
+  tables: TableState,
+  filename: string = 'schema.sql',
+): void {
   const sql = generateSQLSchema(tables);
 
   // Create blob and download
