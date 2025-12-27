@@ -27,7 +27,7 @@ export function SchemaSidebar() {
   }
 
   return (
-    <div className="pointer-events-auto absolute left-0 top-0 z-40 h-full w-[380px] bg-background/95 backdrop-blur border-r border-border/50 flex flex-col shadow-xl">
+    <div className="pointer-events-auto absolute left-0 top-0 z-40 h-full w-[450px] bg-background/95 backdrop-blur border-r border-border/50 flex flex-col shadow-xl">
       {/* Header */}
       <div className="px-4 py-2.5 border-b border-border/30 flex items-center justify-between">
         <h2 className="text-sm font-semibold text-foreground">Schema Editor</h2>

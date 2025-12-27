@@ -36,6 +36,7 @@ export interface Column {
   unique?: boolean;
   enumValues?: string[]; // Values for enum types
   enumTypeName?: string; // Name of the enum type (e.g., "user_status")
+  isArray?: boolean; // True for array columns (e.g., status[] for multi-value enum)
   comment?: string; // Comment/note for the column
 }
 

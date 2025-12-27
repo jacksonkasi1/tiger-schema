@@ -20,7 +20,7 @@ type EnumMap = Record<string, EnumTypeDefinition>;
 export function generateSchemaSQL(
   tables: TableState,
   enumTypes: EnumMap = {},
-  options?: { tableId?: string }
+  options?: { tableId?: string },
 ): string {
   if (options?.tableId) {
     const table = tables[options.tableId];
@@ -91,7 +91,7 @@ export function generateSchemaSQL(
 export function generateTableSQL(
   tableId: string,
   table: Table,
-  enumTypes: EnumMap = {}
+  enumTypes: EnumMap = {},
 ): string {
   const lines: string[] = [];
   const usedEnums = collectTableEnums(table, enumTypes);
@@ -143,7 +143,7 @@ export function parseSchemaSQL(sql: string): SchemaSqlParseResult {
 function generateSingleTableSQL(
   tableId: string,
   table: Table,
-  enumTypes: EnumMap
+  enumTypes: EnumMap,
 ): string {
   const lines: string[] = [];
   const usedEnums = collectTableEnums(table, enumTypes);
@@ -178,10 +178,7 @@ function insertBlankLines(statements: string[]): string[] {
   return result;
 }
 
-function mergeEnumDefinitions(
-  tables: TableState,
-  enumTypes: EnumMap
-): EnumMap {
+function mergeEnumDefinitions(tables: TableState, enumTypes: EnumMap): EnumMap {
   const merged: EnumMap = { ...enumTypes };
   Object.values(tables).forEach((table) => {
     (table.columns ?? []).forEach((column) => {
@@ -220,7 +217,7 @@ function collectTableEnums(table: Table, enumTypes: EnumMap): EnumMap {
 
 function sortTables(tables: TableState): Array<[string, Table]> {
   return Object.entries(tables).sort(([aKey], [bKey]) =>
-    aKey.localeCompare(bKey)
+    aKey.localeCompare(bKey),
   );
 }
 
@@ -239,7 +236,9 @@ function renderEnumDefinition(enumDef: EnumTypeDefinition): string {
   const schemaPrefix = enumDef.schema
     ? `${quoteIdentifier(enumDef.schema)}.`
     : '';
-  const values = enumDef.values.map((value) => `'${value.replace(/'/g, "''")}'`).join(', ');
+  const values = enumDef.values
+    .map((value) => `'${value.replace(/'/g, "''")}'`)
+    .join(', ');
   return `CREATE TYPE ${schemaPrefix}${quoteIdentifier(enumDef.name)} AS ENUM (${values});`;
 }
 
@@ -265,22 +264,29 @@ function renderColumnDefinition(column: Column): string {
   if (column.required) {
     pieces.push('NOT NULL');
   }
-  if (column.default !== undefined && column.default !== null && column.default !== '') {
+  if (
+    column.default !== undefined &&
+    column.default !== null &&
+    column.default !== ''
+  ) {
     pieces.push(`DEFAULT ${column.default}`);
   }
   return pieces.join(' ');
 }
 
 function resolveColumnType(column: Column): string {
+  const arraySuffix = column.isArray ? '[]' : '';
+
   if (column.enumTypeName) {
     const { schema, name } = parseEnumIdentifier(column.enumTypeName);
-    return schema
+    const enumType = schema
       ? `${quoteIdentifier(schema)}.${quoteIdentifier(name)}`
       : quoteIdentifier(name);
+    return `${enumType}${arraySuffix}`;
   }
 
   const type = column.format || column.type || 'text';
-  return type.toUpperCase();
+  return `${type.toUpperCase()}${arraySuffix}`;
 }
 
 function renderConstraintStatements(tableId: string, table: Table): string[] {
@@ -288,7 +294,9 @@ function renderConstraintStatements(tableId: string, table: Table): string[] {
   const identity = resolveTableIdentity(tableId, table);
   const constraints = table.constraints ?? [];
 
-  const primaryConstraints = constraints.filter((c) => c.type === 'primary_key');
+  const primaryConstraints = constraints.filter(
+    (c) => c.type === 'primary_key',
+  );
   if (primaryConstraints.length > 0) {
     primaryConstraints.forEach((constraint, idx) => {
       const statement = buildPrimaryKeyStatement(identity, constraint, idx);
@@ -302,7 +310,9 @@ function renderConstraintStatements(tableId: string, table: Table): string[] {
     }
   }
 
-  const foreignConstraints = constraints.filter((c) => c.type === 'foreign_key');
+  const foreignConstraints = constraints.filter(
+    (c) => c.type === 'foreign_key',
+  );
   const derivedFks = deriveForeignKeyConstraints(table, foreignConstraints);
   [...foreignConstraints, ...derivedFks].forEach((constraint, idx) => {
     const statement = buildForeignKeyStatement(identity, constraint, idx);
@@ -333,9 +343,7 @@ function renderIndexStatements(tableId: string, table: Table): string[] {
   return sorted.map((indexDef) => {
     const unique = indexDef.unique ? 'UNIQUE ' : '';
     const using = indexDef.using ? ` USING ${indexDef.using}` : '';
-    const columns = indexDef.columns?.length
-      ? indexDef.columns.join(', ')
-      : '';
+    const columns = indexDef.columns?.length ? indexDef.columns.join(', ') : '';
     const where = indexDef.where ? ` WHERE ${indexDef.where}` : '';
     return `CREATE ${unique}INDEX ${quoteIdentifier(indexDef.name)} ON ${identity.qualified}${using} (${columns})${where};`;
   });
@@ -358,15 +366,17 @@ function resolveTableIdentity(tableId: string, table: Table) {
 function buildPrimaryKeyStatement(
   identity: { qualified: string; name: string },
   constraint: TableConstraint,
-  index: number
+  index: number,
 ): string | null {
   if (!constraint.columns || constraint.columns.length === 0) {
     return null;
   }
   const constraintName = quoteIdentifier(
-    constraint.name || `${identity.name}_pkey_${index}`
+    constraint.name || `${identity.name}_pkey_${index}`,
   );
-  const columns = constraint.columns.map((column) => quoteIdentifier(column)).join(', ');
+  const columns = constraint.columns
+    .map((column) => quoteIdentifier(column))
+    .join(', ');
   return `ALTER TABLE ${identity.qualified} ADD CONSTRAINT ${constraintName} PRIMARY KEY (${columns});`;
 }
 
@@ -386,7 +396,7 @@ function derivePrimaryKeyConstraint(table: Table): TableConstraint | null {
 function buildForeignKeyStatement(
   identity: { qualified: string; name: string },
   constraint: TableConstraint,
-  idx: number
+  idx: number,
 ): string | null {
   if (
     constraint.type !== 'foreign_key' ||
@@ -397,14 +407,18 @@ function buildForeignKeyStatement(
     return null;
   }
   const constraintName = quoteIdentifier(
-    constraint.name || `${identity.name}_fk_${idx}`
+    constraint.name || `${identity.name}_fk_${idx}`,
   );
-  const columns = constraint.columns.map((col) => quoteIdentifier(col)).join(', ');
+  const columns = constraint.columns
+    .map((col) => quoteIdentifier(col))
+    .join(', ');
   const ref = constraint.reference;
   const refQualified = ref.schema
     ? `${quoteIdentifier(ref.schema)}.${quoteIdentifier(ref.table)}`
     : quoteIdentifier(ref.table);
-  const refCols = (ref.columns || []).map((col) => quoteIdentifier(col)).join(', ');
+  const refCols = (ref.columns || [])
+    .map((col) => quoteIdentifier(col))
+    .join(', ');
   const onDelete = ref.onDelete ? ` ON DELETE ${ref.onDelete}` : '';
   const onUpdate = ref.onUpdate ? ` ON UPDATE ${ref.onUpdate}` : '';
   return `ALTER TABLE ${identity.qualified} ADD CONSTRAINT ${constraintName} FOREIGN KEY (${columns}) REFERENCES ${refQualified} (${refCols})${onDelete}${onUpdate};`;
@@ -412,13 +426,13 @@ function buildForeignKeyStatement(
 
 function deriveForeignKeyConstraints(
   table: Table,
-  existing: TableConstraint[]
+  existing: TableConstraint[],
 ): TableConstraint[] {
   const derived: TableConstraint[] = [];
   const existingSingleColumn = new Set(
     existing
       .filter((c) => c.columns && c.columns.length === 1)
-      .map((c) => normalizeName(c.columns![0]))
+      .map((c) => normalizeName(c.columns![0])),
   );
 
   (table.columns ?? []).forEach((column) => {
@@ -442,27 +456,29 @@ function deriveForeignKeyConstraints(
 function buildUniqueStatement(
   identity: { qualified: string; name: string },
   constraint: TableConstraint,
-  idx: number
+  idx: number,
 ): string | null {
   if (!constraint.columns || constraint.columns.length === 0) {
     return null;
   }
   const constraintName = quoteIdentifier(
-    constraint.name || `${identity.name}_unique_${idx}`
+    constraint.name || `${identity.name}_unique_${idx}`,
   );
-  const columns = constraint.columns.map((column) => quoteIdentifier(column)).join(', ');
+  const columns = constraint.columns
+    .map((column) => quoteIdentifier(column))
+    .join(', ');
   return `ALTER TABLE ${identity.qualified} ADD CONSTRAINT ${constraintName} UNIQUE (${columns});`;
 }
 
 function deriveUniqueConstraints(
   table: Table,
-  existing: TableConstraint[]
+  existing: TableConstraint[],
 ): TableConstraint[] {
   const derived: TableConstraint[] = [];
   const existingSingles = new Set(
     existing
       .filter((c) => c.columns && c.columns.length === 1)
-      .map((c) => normalizeName(c.columns![0]))
+      .map((c) => normalizeName(c.columns![0])),
   );
 
   (table.columns ?? []).forEach((column) => {
@@ -482,13 +498,13 @@ function deriveUniqueConstraints(
 function buildCheckStatement(
   identity: { qualified: string; name: string },
   constraint: TableConstraint,
-  idx: number
+  idx: number,
 ): string | null {
   if (!constraint.expression) {
     return null;
   }
   const constraintName = quoteIdentifier(
-    constraint.name || `${identity.name}_check_${idx}`
+    constraint.name || `${identity.name}_check_${idx}`,
   );
   return `ALTER TABLE ${identity.qualified} ADD CONSTRAINT ${constraintName} CHECK (${constraint.expression});`;
 }
@@ -502,9 +518,7 @@ function quoteIdentifier(identifier: string): string {
 }
 
 function stripComments(sql: string): string {
-  return sql
-    .replace(/--[^\n]*/g, '')
-    .replace(/\/\*[\s\S]*?\*\//g, '');
+  return sql.replace(/--[^\n]*/g, '').replace(/\/\*[\s\S]*?\*\//g, '');
 }
 
 function splitStatements(sql: string): string[] {
@@ -519,7 +533,7 @@ function extractEnumTypes(statements: string[]): EnumMap {
 
   statements.forEach((statement) => {
     const match = statement.match(
-      /create\s+type\s+(?:if\s+not\s+exists\s+)?([\w\." ]+)\s+as\s+enum\s*\(([^)]+)\)/i
+      /create\s+type\s+(?:if\s+not\s+exists\s+)?([\w\." ]+)\s+as\s+enum\s*\(([^)]+)\)/i,
     );
     if (!match) return;
     const identifier = match[1].trim();
@@ -552,7 +566,7 @@ function extractConstraints(statements: string[]): ParsedConstraint[] {
   statements.forEach((statement) => {
     if (!/^alter\s+table/i.test(statement)) return;
     const match = statement.match(
-      /alter\s+table\s+(?:if\s+exists\s+)?(?:only\s+)?(.+?)\s+add\s+(.*)/i
+      /alter\s+table\s+(?:if\s+exists\s+)?(?:only\s+)?(.+?)\s+add\s+(.*)/i,
     );
     if (!match) return;
     const identifier = match[1].trim();
@@ -586,11 +600,13 @@ function extractConstraints(statements: string[]): ParsedConstraint[] {
     } else if (lower.startsWith('foreign key')) {
       const localMatch = remainder.match(/foreign\s+key\s*\(([^)]+)\)/i);
       const refMatch = remainder.match(
-        /references\s+((?:"[^"]+"|\w+)(?:\.(?:"[^"]+"|\w+))?)\s*\(([^)]+)\)/i
+        /references\s+((?:"[^"]+"|\w+)(?:\.(?:"[^"]+"|\w+))?)\s*\(([^)]+)\)/i,
       );
       if (localMatch && refMatch) {
         const columns = parseColumnList(`(${localMatch[1]})`);
-        const { schema: refSchema, name: refTable } = parseIdentifier(refMatch[1]);
+        const { schema: refSchema, name: refTable } = parseIdentifier(
+          refMatch[1],
+        );
         const refColumns = parseColumnList(`(${refMatch[2]})`);
         const onDeleteMatch = remainder.match(/on\s+delete\s+(\w+)/i);
         const onUpdateMatch = remainder.match(/on\s+update\s+(\w+)/i);
@@ -652,7 +668,7 @@ function extractIndexes(statements: string[]): ParsedIndex[] {
   statements.forEach((statement) => {
     if (!/^create\s+.*index/i.test(statement)) return;
     const match = statement.match(
-      /create\s+(unique\s+)?index\s+(?:if\s+not\s+exists\s+)?([\w"\.]+)\s+on\s+(?:only\s+)?(.+)/i
+      /create\s+(unique\s+)?index\s+(?:if\s+not\s+exists\s+)?([\w"\.]+)\s+on\s+(?:only\s+)?(.+)/i,
     );
     if (!match) return;
     const unique = Boolean(match[1]);
@@ -702,7 +718,10 @@ function extractIndexes(statements: string[]): ParsedIndex[] {
   return results;
 }
 
-function extractParenthetical(value: string, openIndex: number): { content: string; endIndex: number } | null {
+function extractParenthetical(
+  value: string,
+  openIndex: number,
+): { content: string; endIndex: number } | null {
   let depth = 0;
   let inSingle = false;
   let inDouble = false;
@@ -735,7 +754,7 @@ function splitList(value: string): string[] {
 
 function applyConstraintsToTables(
   tables: TableState,
-  constraints: ParsedConstraint[]
+  constraints: ParsedConstraint[],
 ) {
   constraints.forEach(({ tableKey, constraint }) => {
     const table = tables[tableKey];
@@ -808,7 +827,7 @@ function applyIndexesToTables(tables: TableState, indexes: ParsedIndex[]) {
 function findColumn(table: Table, name: string): Column | undefined {
   const normalized = normalizeName(name);
   return (table.columns || []).find(
-    (column) => normalizeName(column.title) === normalized
+    (column) => normalizeName(column.title) === normalized,
   );
 }
 
@@ -821,7 +840,11 @@ function parseColumnList(value: string): string[] {
   return splitList(inner).map((entry) => unquoteIdentifier(entry));
 }
 
-function parseEnumIdentifier(value: string): { schema?: string; name: string; key: string } {
+function parseEnumIdentifier(value: string): {
+  schema?: string;
+  name: string;
+  key: string;
+} {
   const { schema, name } = parseIdentifier(value);
   const key = schema ? `${schema}.${name}` : name;
   return { schema, name, key };
@@ -869,7 +892,10 @@ function normalizeName(name: string): string {
   return unquoteIdentifier(name).toLowerCase();
 }
 
-function consumeIdentifierWithRest(input: string): { identifier: string; rest: string } {
+function consumeIdentifierWithRest(input: string): {
+  identifier: string;
+  rest: string;
+} {
   let inQuotes = false;
   let endIndex = input.length;
 
