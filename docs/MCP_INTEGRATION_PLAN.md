@@ -31,10 +31,10 @@ Before starting any development work, ensure the following checks pass:
 
 ### Required Checks (Must Pass Before Each Phase)
 
-- [ ] **TypeScript Check**: `npm run typecheck` passes with zero errors
-- [ ] **Lint Check**: `npm run lint` passes with zero errors/warnings
-- [ ] **Build Check**: `npm run build` completes successfully
-- [ ] **Development Server**: `npm run dev` starts without errors
+- [ ] **TypeScript Check**: `bun run typecheck` passes with zero errors
+- [ ] **Lint Check**: `bun run lint` passes with zero errors/warnings
+- [ ] **Build Check**: `bun run build` completes successfully
+- [ ] **Development Server**: `bun run dev` starts without errors
 
 ### Environment Setup
 
@@ -56,16 +56,17 @@ Integrate pg-aiguide MCP server as the primary PostgreSQL knowledge source for t
 **Task**: Add required MCP packages to the project.
 
 ```bash
-npm install @ai-sdk/mcp @modelcontextprotocol/sdk
+bun add @ai-sdk/mcp @modelcontextprotocol/sdk
 ```
 
 **Files Modified**:
 - `package.json`
+- `bun.lock`
 
 **Acceptance Criteria**:
 - [ ] Dependencies installed successfully
-- [ ] `npm run typecheck` passes
-- [ ] `npm run build` passes
+- [ ] `bun run typecheck` passes
+- [ ] `bun run build` passes
 
 ---
 
