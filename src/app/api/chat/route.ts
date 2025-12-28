@@ -28,20 +28,20 @@ type CustomDataPart =
     transient?: boolean;
   }
   | {
-    type: 'data-operation-history';
-    data: { operations: OperationRecord[]; canUndo: boolean };
-  };
+      type: 'data-operation-history';
+      data: { operations: OperationRecord[]; canUndo: boolean };
+    };
 
 // Operation history for undo/redo support (Phase 5.2)
 export interface OperationRecord {
   id: string;
   type:
-  | 'createTable'
-  | 'dropTable'
-  | 'renameTable'
-  | 'addColumn'
-  | 'dropColumn'
-  | 'alterColumn';
+    | 'createTable'
+    | 'dropTable'
+    | 'renameTable'
+    | 'addColumn'
+    | 'dropColumn'
+    | 'alterColumn';
   tableId: string;
   before: Table | null;
   after: Table | null;
@@ -263,7 +263,6 @@ For an e-commerce request, create tables like:
 2. Create parent/root tables FIRST (no FKs)
 3. Create child tables with proper FKs
 4. Confirm completion with a brief summary in natural language`;
-
 
 // Generate unique operation ID
 const generateOperationId = () =>
@@ -563,15 +562,68 @@ export async function POST(req: Request) {
           operationCount++;
           const beforeState = cloneTable(source);
           const { schema } = parseTableIdentifier(toTableId);
+          const oldTableName = parseTableIdentifier(fromTableId).name;
+          const newTableName = parseTableIdentifier(toTableId).name;
 
           const updated: Table = {
             ...source,
             schema: schema || source.schema || 'public',
-            title: parseTableIdentifier(toTableId).name,
+            title: newTableName,
           };
 
           delete schemaState[fromTableId];
           schemaState[toTableId] = updated;
+
+          // Update all foreign key references pointing to the old table name
+          // FK format can be: "table.column" or "schema.table.column"
+          Object.keys(schemaState).forEach((tblKey) => {
+            const tbl = schemaState[tblKey];
+            if (!tbl.columns) return;
+
+            let hasUpdates = false;
+            const updatedColumns = tbl.columns.map((col) => {
+              if (!col.fk) return col;
+
+              // Parse the FK reference
+              const fkParts = col.fk.split('.');
+              let targetTable: string;
+              let targetColumn: string;
+              let targetSchema: string | undefined;
+
+              if (fkParts.length === 2) {
+                // Format: table.column
+                [targetTable, targetColumn] = fkParts;
+              } else if (fkParts.length === 3) {
+                // Format: schema.table.column
+                [targetSchema, targetTable, targetColumn] = fkParts;
+              } else {
+                return col; // Invalid format, skip
+              }
+
+              // Check if this FK points to the renamed table
+              if (targetTable === oldTableName) {
+                hasUpdates = true;
+                // Update the FK reference to use the new table name
+                const newFk = targetSchema
+                  ? `${targetSchema}.${newTableName}.${targetColumn}`
+                  : `${newTableName}.${targetColumn}`;
+
+                return {
+                  ...col,
+                  fk: newFk,
+                };
+              }
+
+              return col;
+            });
+
+            if (hasUpdates) {
+              schemaState[tblKey] = {
+                ...tbl,
+                columns: updatedColumns,
+              };
+            }
+          });
 
           // Record operation for undo
           recordOperation(
@@ -908,9 +960,10 @@ export async function POST(req: Request) {
 
         // Detect if request requires tool execution (for toolChoice)
         const userMessage = messages[messages.length - 1]?.content || '';
-        const requiresTools = /create|delete|drop|add|modify|remove|rename|build|make|generate|design/i.test(
-          typeof userMessage === 'string' ? userMessage : ''
-        );
+        const requiresTools =
+          /create|delete|drop|add|modify|remove|rename|build|make|generate|design/i.test(
+            typeof userMessage === 'string' ? userMessage : '',
+          );
 
         // Get maxSteps from request (user-configurable, default 50)
         const maxAgentSteps = body.maxSteps ?? 50;
@@ -920,8 +973,10 @@ export async function POST(req: Request) {
         // - Gemini: use 'auto' always (Gemini outputs weird text like '[]' with 'required')
         const isGemini = providerKey === 'google';
         const toolChoiceSetting = isGemini
-          ? 'auto'  // Gemini works better with 'auto'
-          : (requiresTools ? 'required' : 'auto');
+          ? 'auto' // Gemini works better with 'auto'
+          : requiresTools
+            ? 'required'
+            : 'auto';
 
         // Create the ToolLoopAgent (AI SDK 6)
         const agent = new ToolLoopAgent({
@@ -935,9 +990,9 @@ export async function POST(req: Request) {
           onStepFinish: ({ toolCalls, toolResults, text, finishReason }) => {
             console.log(
               `[Step] Tool calls: ${toolCalls?.length || 0}, ` +
-              `Results: ${toolResults?.length || 0}, ` +
-              `Text: ${text ? text.substring(0, 50) : 'none'}, ` +
-              `Finish: ${finishReason}`,
+                `Results: ${toolResults?.length || 0}, ` +
+                `Text: ${text ? text.substring(0, 50) : 'none'}, ` +
+                `Finish: ${finishReason}`,
             );
 
             if (toolCalls) {
