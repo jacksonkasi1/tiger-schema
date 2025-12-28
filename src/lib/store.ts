@@ -10,6 +10,22 @@ import {
   EnumTypeDefinition,
 } from './types';
 import { RelationshipType } from '@/types/flow';
+import {
+  HistoryState,
+  createInitialHistoryState,
+  createHistoryEntry,
+  pushHistoryEntry,
+  canUndo as historyCanUndo,
+  canRedo as historyCanRedo,
+  getUndoLabel as historyGetUndoLabel,
+  getRedoLabel as historyGetRedoLabel,
+  deepClone,
+  HistoryLabels,
+  serializeHistory,
+  deserializeHistory,
+  areSnapshotsDifferent,
+  HISTORY_STORAGE_KEY,
+} from './history';
 
 interface AppState {
   // Modal state
@@ -109,7 +125,7 @@ interface AppState {
   clearCache: () => void;
 
   // Add new tables (used for copy/paste, AI updates, etc.)
-  addTables: (tables: TableState) => void;
+  addTables: (tables: TableState, skipHistory?: boolean) => void;
 
   // Enum types
   enumTypes: Record<string, EnumTypeDefinition>;
@@ -123,6 +139,19 @@ interface AppState {
   deleteEnumType: (enumKey: string) => void;
   renameEnumType: (oldKey: string, newName: string) => void;
   getEnumType: (enumKey: string) => EnumTypeDefinition | undefined;
+
+  // History state for undo/redo
+  history: HistoryState;
+
+  // History actions
+  pushHistory: (label: string) => void;
+  undo: () => void;
+  redo: () => void;
+  canUndo: () => boolean;
+  canRedo: () => boolean;
+  getUndoLabel: () => string | null;
+  getRedoLabel: () => string | null;
+  clearHistory: () => void;
 }
 
 const checkView = (title: string, paths: any) => {
@@ -321,6 +350,9 @@ export const useStore = create<AppState>((set, get) => {
     focusTableId: null,
     focusTableTrigger: 0,
 
+    // History state
+    history: createInitialHistoryState(),
+
     // Actions
     setIsModalOpen: (open) => set({ isModalOpen: open }),
     setSidebarOpen: (open) => set({ sidebarOpen: open }),
@@ -429,6 +461,8 @@ export const useStore = create<AppState>((set, get) => {
         set({ visibleSchemas: updatedVisibleSchemas });
       }
 
+      // Push history AFTER state change with the resulting state
+      get().pushHistory(HistoryLabels.importSQL());
       get().saveToLocalStorage();
     },
 
@@ -478,6 +512,8 @@ export const useStore = create<AppState>((set, get) => {
         return updates;
       });
 
+      // Push history AFTER state change with the resulting state
+      get().pushHistory(HistoryLabels.applySQLChanges());
       get().saveToLocalStorage();
     },
 
@@ -506,6 +542,7 @@ export const useStore = create<AppState>((set, get) => {
       const table = currentTables[tableId];
       if (!table) return;
 
+      const oldName = tableId;
       const updatedTables = { ...currentTables };
       delete updatedTables[tableId];
       updatedTables[newName] = {
@@ -513,20 +550,113 @@ export const useStore = create<AppState>((set, get) => {
         title: newName,
       };
 
+      // Update all foreign key references pointing to the old table name
+      // FK format can be: "table.column" or "schema.table.column"
+      Object.keys(updatedTables).forEach((tblKey) => {
+        const tbl = updatedTables[tblKey];
+        if (!tbl.columns) return;
+
+        const updatedColumns = tbl.columns.map((col) => {
+          if (!col.fk) return col;
+
+          // Parse the FK reference
+          const fkParts = col.fk.split('.');
+          let targetTable: string;
+          let targetColumn: string;
+          let targetSchema: string | undefined;
+
+          if (fkParts.length === 2) {
+            // Format: table.column
+            [targetTable, targetColumn] = fkParts;
+          } else if (fkParts.length === 3) {
+            // Format: schema.table.column
+            [targetSchema, targetTable, targetColumn] = fkParts;
+          } else {
+            return col; // Invalid format, skip
+          }
+
+          // Check if this FK points to the renamed table
+          if (targetTable === oldName) {
+            // Update the FK reference to use the new table name
+            const newFk = targetSchema
+              ? `${targetSchema}.${newName}.${targetColumn}`
+              : `${newName}.${targetColumn}`;
+
+            return {
+              ...col,
+              fk: newFk,
+            };
+          }
+
+          return col;
+        });
+
+        updatedTables[tblKey] = {
+          ...tbl,
+          columns: updatedColumns,
+        };
+      });
+
+      // Update edgeRelationships to use the new table name in edge IDs
+      const currentEdgeRelationships = get().edgeRelationships;
+      const updatedEdgeRelationships: Record<string, RelationshipType> = {};
+
+      Object.entries(currentEdgeRelationships).forEach(([edgeId, relType]) => {
+        // Edge ID format: "sourceTable.sourceCol-targetTable.targetCol"
+        // Need to update if oldName appears in either position
+        let newEdgeId = edgeId;
+
+        // Replace old table name with new table name in edge ID
+        // Be careful to match whole table names (not partial matches)
+        const edgeParts = edgeId.split('-');
+        if (edgeParts.length === 2) {
+          const [sourcePart, targetPart] = edgeParts;
+          const sourceTableName = sourcePart.split('.')[0];
+          const targetTableName = targetPart.split('.')[0];
+
+          let newSourcePart = sourcePart;
+          let newTargetPart = targetPart;
+
+          if (sourceTableName === oldName) {
+            newSourcePart = newName + sourcePart.slice(oldName.length);
+          }
+          if (targetTableName === oldName) {
+            newTargetPart = newName + targetPart.slice(oldName.length);
+          }
+
+          newEdgeId = `${newSourcePart}-${newTargetPart}`;
+        }
+
+        updatedEdgeRelationships[newEdgeId] = relType;
+      });
+
       // Update expandedTables if the old table was expanded
       const wasExpanded = get().expandedTables.has(tableId);
       if (wasExpanded) {
         const newExpanded = new Set(get().expandedTables);
         newExpanded.delete(tableId);
         newExpanded.add(newName);
-        set({ tables: updatedTables, expandedTables: newExpanded });
+        set({
+          tables: updatedTables,
+          expandedTables: newExpanded,
+          edgeRelationships: updatedEdgeRelationships,
+        });
       } else {
-        set({ tables: updatedTables });
+        set({
+          tables: updatedTables,
+          edgeRelationships: updatedEdgeRelationships,
+        });
       }
+
+      // Push history AFTER state change with the resulting state
+      get().pushHistory(HistoryLabels.renameTable(oldName, newName));
       get().saveToLocalStorage();
     },
 
     updateTableColor: (tableId, color) => {
+      const table = get().tables[tableId];
+      if (!table) return;
+
       set((state) => {
         const existing = state.tables[tableId];
         if (!existing) return state;
@@ -541,10 +671,16 @@ export const useStore = create<AppState>((set, get) => {
           },
         };
       });
+
+      // Push history AFTER state change with the resulting state
+      get().pushHistory(HistoryLabels.changeTableColor(tableId));
       get().saveToLocalStorage();
     },
 
     updateTableComment: (tableId, comment) => {
+      const table = get().tables[tableId];
+      if (!table) return;
+
       set((state) => {
         const existing = state.tables[tableId];
         if (!existing) return state;
@@ -559,6 +695,9 @@ export const useStore = create<AppState>((set, get) => {
           },
         };
       });
+
+      // Push history AFTER state change with the resulting state
+      get().pushHistory(HistoryLabels.updateTableComment(tableId));
       get().saveToLocalStorage();
     },
 
@@ -591,11 +730,14 @@ export const useStore = create<AppState>((set, get) => {
         },
       };
 
-      addTables(newTable);
+      addTables(newTable, true); // Skip history push in addTables
 
       set((state) => ({
         expandedTables: new Set(state.expandedTables).add(tableName),
       }));
+
+      // Push history AFTER state change with the resulting state
+      get().pushHistory(HistoryLabels.addTable(tableName));
 
       triggerFocusTable(tableName);
 
@@ -603,6 +745,9 @@ export const useStore = create<AppState>((set, get) => {
     },
 
     addColumn: (tableId, column) => {
+      const table = get().tables[tableId];
+      if (!table) return;
+
       set((state) => {
         const existing = state.tables[tableId];
         if (!existing) return state;
@@ -617,10 +762,18 @@ export const useStore = create<AppState>((set, get) => {
           },
         };
       });
+
+      // Push history AFTER state change with the resulting state
+      get().pushHistory(HistoryLabels.addColumn(tableId, column.title));
       get().saveToLocalStorage();
     },
 
     updateColumn: (tableId, columnIndex, updates) => {
+      const table = get().tables[tableId];
+      if (!table || !table.columns) return;
+
+      const columnName = table.columns[columnIndex]?.title || 'column';
+
       set((state) => {
         const existing = state.tables[tableId];
         if (!existing || !existing.columns) return state;
@@ -641,10 +794,18 @@ export const useStore = create<AppState>((set, get) => {
           },
         };
       });
+
+      // Push history AFTER state change with the resulting state
+      get().pushHistory(HistoryLabels.updateColumn(tableId, columnName));
       get().saveToLocalStorage();
     },
 
     deleteColumn: (tableId, columnIndex) => {
+      const table = get().tables[tableId];
+      if (!table || !table.columns) return;
+
+      const columnName = table.columns[columnIndex]?.title || 'column';
+
       set((state) => {
         const existing = state.tables[tableId];
         if (!existing || !existing.columns) return state;
@@ -663,10 +824,16 @@ export const useStore = create<AppState>((set, get) => {
           },
         };
       });
+
+      // Push history AFTER state change with the resulting state
+      get().pushHistory(HistoryLabels.deleteColumn(tableId, columnName));
       get().saveToLocalStorage();
     },
 
     reorderColumns: (tableId, oldIndex, newIndex) => {
+      const table = get().tables[tableId];
+      if (!table || !table.columns) return;
+
       set((state) => {
         const existing = state.tables[tableId];
         if (!existing || !existing.columns) return state;
@@ -685,10 +852,18 @@ export const useStore = create<AppState>((set, get) => {
           },
         };
       });
+
+      // Push history AFTER state change with the resulting state
+      get().pushHistory(HistoryLabels.reorderColumns(tableId));
       get().saveToLocalStorage();
     },
 
     deleteTable: (tableId) => {
+      const table = get().tables[tableId];
+      if (!table) return;
+
+      const tableName = tableId;
+
       set((state) => {
         const newTables = { ...state.tables };
         delete newTables[tableId];
@@ -701,6 +876,9 @@ export const useStore = create<AppState>((set, get) => {
           expandedTables: newExpanded,
         };
       });
+
+      // Push history AFTER state change with the resulting state
+      get().pushHistory(HistoryLabels.deleteTable(tableName));
       get().saveToLocalStorage();
     },
 
@@ -804,6 +982,9 @@ export const useStore = create<AppState>((set, get) => {
           [edgeId]: type,
         },
       }));
+
+      // Push history AFTER state change with the resulting state
+      get().pushHistory(HistoryLabels.updateRelationship());
       get().saveToLocalStorage();
     },
 
@@ -924,6 +1105,50 @@ export const useStore = create<AppState>((set, get) => {
         ) {
           set({ connectionMode: connectionModeData as 'strict' | 'flexible' });
         }
+
+        // Try to restore history from localStorage
+        const historyData = localStorage.getItem(HISTORY_STORAGE_KEY);
+        const state = get();
+
+        if (historyData) {
+          const restoredHistory = deserializeHistory(historyData);
+          if (restoredHistory && restoredHistory.entries.length > 0) {
+            console.log(
+              `[initializeFromLocalStorage] Restored ${restoredHistory.entries.length} history entries`,
+            );
+            set({ history: restoredHistory });
+          } else if (Object.keys(state.tables).length > 0) {
+            // History invalid or empty, create initial entry
+            const entry = createHistoryEntry(
+              HistoryLabels.initialState(),
+              state.tables,
+              state.enumTypes,
+              state.edgeRelationships,
+            );
+            set({
+              history: {
+                ...state.history,
+                entries: [entry],
+                currentIndex: 0,
+              },
+            });
+          }
+        } else if (Object.keys(state.tables).length > 0) {
+          // No history saved, create initial entry
+          const entry = createHistoryEntry(
+            HistoryLabels.initialState(),
+            state.tables,
+            state.enumTypes,
+            state.edgeRelationships,
+          );
+          set({
+            history: {
+              ...state.history,
+              entries: [entry],
+              currentIndex: 0,
+            },
+          });
+        }
       } catch (error) {
         console.error('Error loading from localStorage:', error);
       }
@@ -934,7 +1159,9 @@ export const useStore = create<AppState>((set, get) => {
       debouncedSave(performSave);
     },
 
-    addTables: (tablesToAdd: TableState) => {
+    addTables: (tablesToAdd: TableState, skipHistory?: boolean) => {
+      const tableCount = Object.keys(tablesToAdd).length;
+
       set((state) => {
         const mergedTables = {
           ...state.tables,
@@ -956,6 +1183,10 @@ export const useStore = create<AppState>((set, get) => {
         };
       });
 
+      // Push history AFTER state change with the resulting state (unless skipped)
+      if (!skipHistory) {
+        get().pushHistory(HistoryLabels.bulkAddTables(tableCount));
+      }
       get().saveToLocalStorage();
     },
 
@@ -968,6 +1199,8 @@ export const useStore = create<AppState>((set, get) => {
       const state = get();
       const existingEnum = state.enumTypes[enumKey];
       if (!existingEnum) return;
+
+      const enumName = existingEnum.name;
 
       // Update the enum type definition
       const updatedEnumTypes = {
@@ -1004,6 +1237,9 @@ export const useStore = create<AppState>((set, get) => {
         enumTypes: updatedEnumTypes,
         tables: updatedTables,
       });
+
+      // Push history AFTER state change with the resulting state
+      get().pushHistory(HistoryLabels.updateEnum(enumName));
       get().saveToLocalStorage();
     },
 
@@ -1021,6 +1257,9 @@ export const useStore = create<AppState>((set, get) => {
           [enumKey]: newEnum,
         },
       }));
+
+      // Push history AFTER state change with the resulting state
+      get().pushHistory(HistoryLabels.createEnum(name));
       get().saveToLocalStorage();
     },
 
@@ -1028,6 +1267,8 @@ export const useStore = create<AppState>((set, get) => {
       const state = get();
       const enumToDelete = state.enumTypes[enumKey];
       if (!enumToDelete) return;
+
+      const enumName = enumToDelete.name;
 
       // Remove from enumTypes
       const { [enumKey]: _, ...remainingEnums } = state.enumTypes;
@@ -1061,6 +1302,9 @@ export const useStore = create<AppState>((set, get) => {
         enumTypes: remainingEnums,
         tables: updatedTables,
       });
+
+      // Push history AFTER state change with the resulting state
+      get().pushHistory(HistoryLabels.deleteEnum(enumName));
       get().saveToLocalStorage();
     },
 
@@ -1068,6 +1312,8 @@ export const useStore = create<AppState>((set, get) => {
       const state = get();
       const existingEnum = state.enumTypes[oldKey];
       if (!existingEnum) return;
+
+      const oldName = existingEnum.name;
 
       // Determine new key
       const newKey = existingEnum.schema
@@ -1110,11 +1356,230 @@ export const useStore = create<AppState>((set, get) => {
         enumTypes: updatedEnumTypes,
         tables: updatedTables,
       });
+
+      // Push history AFTER state change with the resulting state
+      get().pushHistory(HistoryLabels.renameEnum(oldName, newName));
       get().saveToLocalStorage();
     },
 
     getEnumType: (enumKey) => {
       return get().enumTypes[enumKey];
+    },
+
+    // History actions
+    pushHistory: (label) => {
+      const state = get();
+      const currentHistory = state.history;
+
+      // Create entry with CURRENT state (after action has been applied)
+      const entry = createHistoryEntry(
+        label,
+        state.tables,
+        state.enumTypes,
+        state.edgeRelationships,
+      );
+
+      // Check if this would be a duplicate (no actual change)
+      if (currentHistory.entries.length > 0) {
+        const currentEntry =
+          currentHistory.entries[currentHistory.currentIndex];
+        if (
+          currentEntry &&
+          !areSnapshotsDifferent(currentEntry.snapshot, entry.snapshot)
+        ) {
+          console.log(
+            `[pushHistory] Skipping duplicate entry for "${label}" - no state change detected`,
+          );
+          return;
+        }
+      }
+
+      console.log(`[pushHistory] Adding entry: "${label}"`, {
+        entriesBefore: currentHistory.entries.length,
+        currentIndex: currentHistory.currentIndex,
+        tableCount: Object.keys(state.tables).length,
+      });
+
+      set((state) => ({
+        history: pushHistoryEntry(state.history, entry),
+      }));
+
+      // Persist history to localStorage
+      const newHistory = get().history;
+      try {
+        localStorage.setItem(HISTORY_STORAGE_KEY, serializeHistory(newHistory));
+      } catch (error) {
+        console.warn('[pushHistory] Failed to persist history:', error);
+      }
+    },
+
+    undo: () => {
+      const { history } = get();
+      console.log('[Undo] Before:', {
+        currentIndex: history.currentIndex,
+        entriesCount: history.entries.length,
+        canUndo: historyCanUndo(history),
+        entries: history.entries.map((e, i) => ({
+          index: i,
+          label: e.label,
+          tablePositions: Object.entries(e.snapshot.tables).map(([k, t]) => ({
+            id: k,
+            x: t.position?.x,
+            y: t.position?.y,
+          })),
+        })),
+      });
+
+      if (!historyCanUndo(history)) {
+        console.log('[Undo] Cannot undo - at initial state');
+        return;
+      }
+
+      // Go to the previous entry (the state BEFORE the current action)
+      const prevEntry = history.entries[history.currentIndex - 1];
+      console.log('[Undo] Restoring to entry:', {
+        index: history.currentIndex - 1,
+        label: prevEntry.label,
+        tableNames: Object.keys(prevEntry.snapshot.tables),
+        positions: Object.entries(prevEntry.snapshot.tables).map(([k, t]) => ({
+          id: k,
+          x: t.position?.x,
+          y: t.position?.y,
+        })),
+      });
+
+      const newHistory = {
+        ...history,
+        currentIndex: history.currentIndex - 1,
+      };
+
+      set({
+        tables: deepClone(prevEntry.snapshot.tables),
+        enumTypes: deepClone(prevEntry.snapshot.enumTypes),
+        edgeRelationships: deepClone(prevEntry.snapshot.edgeRelationships),
+        history: newHistory,
+      });
+
+      const newState = get();
+      console.log('[Undo] After:', {
+        currentIndex: newState.history.currentIndex,
+        tableNames: Object.keys(newState.tables),
+        canUndo: historyCanUndo(newState.history),
+        canRedo: historyCanRedo(newState.history),
+      });
+
+      // Persist history and state
+      try {
+        localStorage.setItem(HISTORY_STORAGE_KEY, serializeHistory(newHistory));
+      } catch (error) {
+        console.warn('[Undo] Failed to persist history:', error);
+      }
+      get().saveToLocalStorage();
+    },
+
+    redo: () => {
+      const { history } = get();
+      console.log('[Redo] Before:', {
+        currentIndex: history.currentIndex,
+        entriesCount: history.entries.length,
+        canRedo: historyCanRedo(history),
+        entries: history.entries.map((e, i) => ({
+          index: i,
+          label: e.label,
+          tablePositions: Object.entries(e.snapshot.tables).map(([k, t]) => ({
+            id: k,
+            x: t.position?.x,
+            y: t.position?.y,
+          })),
+        })),
+      });
+
+      if (!historyCanRedo(history)) {
+        console.log('[Redo] Cannot redo - at end of history');
+        return;
+      }
+
+      // Go to the next entry (the state AFTER the redone action)
+      const nextEntry = history.entries[history.currentIndex + 1];
+      console.log('[Redo] Restoring to entry:', {
+        index: history.currentIndex + 1,
+        label: nextEntry.label,
+        tableNames: Object.keys(nextEntry.snapshot.tables),
+        positions: Object.entries(nextEntry.snapshot.tables).map(([k, t]) => ({
+          id: k,
+          x: t.position?.x,
+          y: t.position?.y,
+        })),
+      });
+
+      const newHistory = {
+        ...history,
+        currentIndex: history.currentIndex + 1,
+      };
+
+      set({
+        tables: deepClone(nextEntry.snapshot.tables),
+        enumTypes: deepClone(nextEntry.snapshot.enumTypes),
+        edgeRelationships: deepClone(nextEntry.snapshot.edgeRelationships),
+        history: newHistory,
+      });
+
+      const newState = get();
+      console.log('[Redo] After:', {
+        currentIndex: newState.history.currentIndex,
+        tableNames: Object.keys(newState.tables),
+        canUndo: historyCanUndo(newState.history),
+        canRedo: historyCanRedo(newState.history),
+      });
+
+      // Persist history and state
+      try {
+        localStorage.setItem(HISTORY_STORAGE_KEY, serializeHistory(newHistory));
+      } catch (error) {
+        console.warn('[Redo] Failed to persist history:', error);
+      }
+      get().saveToLocalStorage();
+    },
+
+    canUndo: () => historyCanUndo(get().history),
+
+    canRedo: () => historyCanRedo(get().history),
+
+    getUndoLabel: () => historyGetUndoLabel(get().history),
+
+    getRedoLabel: () => historyGetRedoLabel(get().history),
+
+    clearHistory: () => {
+      // Create a fresh history with current state as the initial entry
+      const state = get();
+      const entry = createHistoryEntry(
+        HistoryLabels.initialState(),
+        state.tables,
+        state.enumTypes,
+        state.edgeRelationships,
+      );
+
+      const newHistory: HistoryState = {
+        entries: [entry],
+        currentIndex: 0,
+        maxEntries: state.history.maxEntries,
+      };
+
+      set({ history: newHistory });
+
+      // Persist cleared history
+      try {
+        localStorage.setItem(HISTORY_STORAGE_KEY, serializeHistory(newHistory));
+      } catch (error) {
+        console.warn(
+          '[clearHistory] Failed to persist cleared history:',
+          error,
+        );
+      }
+
+      console.log(
+        '[clearHistory] History cleared, created fresh initial state',
+      );
     },
 
     clearCache: () => {
@@ -1127,6 +1592,10 @@ export const useStore = create<AppState>((set, get) => {
         localStorage.removeItem('visible-schemas');
         localStorage.removeItem('collapsed-schemas');
         localStorage.removeItem('enum-types');
+        localStorage.removeItem(HISTORY_STORAGE_KEY);
+
+        // Reset history state completely
+        set({ history: createInitialHistoryState() });
 
         // Clear timeout if pending
         if (saveTimeoutId) {
@@ -1134,7 +1603,7 @@ export const useStore = create<AppState>((set, get) => {
           saveTimeoutId = null;
         }
 
-        console.log('Cache cleared successfully');
+        console.log('Cache cleared successfully (including history)');
 
         // Dispatch event for UI feedback
         if (typeof window !== 'undefined' && window.dispatchEvent) {
