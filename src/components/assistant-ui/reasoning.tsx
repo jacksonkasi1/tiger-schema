@@ -1,6 +1,6 @@
 'use client';
 
-import { FC, PropsWithChildren, useState } from 'react';
+import { FC, PropsWithChildren } from 'react';
 import { ChevronDown, Brain } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
@@ -8,6 +8,7 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from '@/components/ui/collapsible';
+import { useMessage } from '@assistant-ui/react';
 
 // Shimmer animation for streaming state
 const ShimmerEffect: FC<{ className?: string }> = ({ className }) => (
@@ -18,77 +19,6 @@ const ShimmerEffect: FC<{ className?: string }> = ({ className }) => (
     )}
   />
 );
-
-// Internal components for building the reasoning UI
-const ReasoningRoot: FC<
-  PropsWithChildren<{ className?: string; defaultOpen?: boolean }>
-> = ({ children, className, defaultOpen = false }) => {
-  const [isOpen, setIsOpen] = useState(defaultOpen);
-
-  return (
-    <Collapsible
-      open={isOpen}
-      onOpenChange={setIsOpen}
-      className={cn(
-        'aui-reasoning-root mb-3 rounded-lg border border-purple-500/20 bg-purple-500/5 overflow-hidden',
-        className,
-      )}
-    >
-      {children}
-    </Collapsible>
-  );
-};
-
-const ReasoningTrigger: FC<{
-  isStreaming?: boolean;
-  className?: string;
-  label?: string;
-}> = ({ isStreaming, className, label }) => {
-  return (
-    <CollapsibleTrigger
-      className={cn(
-        'aui-reasoning-trigger flex w-full items-center gap-2 px-3 py-2 text-xs font-medium',
-        'text-purple-600 dark:text-purple-400 hover:bg-purple-500/10 transition-colors',
-        'relative overflow-hidden',
-        className,
-      )}
-    >
-      {isStreaming && <ShimmerEffect />}
-      <Brain
-        size={12}
-        className={cn(isStreaming && 'animate-pulse', 'relative z-10')}
-      />
-      <span className="relative z-10">
-        {label || (isStreaming ? 'Thinking...' : 'Reasoning')}
-      </span>
-      {isStreaming && (
-        <span className="ml-2 h-1.5 w-1.5 rounded-full bg-purple-500 animate-pulse relative z-10" />
-      )}
-      <ChevronDown
-        size={12}
-        className="ml-auto transition-transform duration-200 [[data-state=open]>&]:rotate-180 relative z-10"
-      />
-    </CollapsibleTrigger>
-  );
-};
-
-const ReasoningContent: FC<PropsWithChildren<{ className?: string }>> = ({
-  children,
-  className,
-}) => {
-  return (
-    <CollapsibleContent
-      className={cn(
-        'aui-reasoning-content px-3 pb-3 text-xs text-muted-foreground border-t border-purple-500/10',
-        className,
-      )}
-    >
-      <div className="pt-2 prose prose-xs dark:prose-invert max-w-none">
-        {children}
-      </div>
-    </CollapsibleContent>
-  );
-};
 
 const ReasoningText: FC<PropsWithChildren<{ className?: string }>> = ({
   children,
@@ -104,38 +34,41 @@ const ReasoningText: FC<PropsWithChildren<{ className?: string }>> = ({
 };
 
 // Main Reasoning Component - for assistant-ui MessagePrimitive.Parts
-// This component receives props from the parent when used as a part component
+// This component receives props from the parent when used as a part component.
+// It renders the content of a single reasoning part.
+// Since it's typically wrapped in ReasoningGroup, we don't render a Collapsible here to avoid nesting.
 export const Reasoning: FC<{
   text?: string;
+  part?: { text: string; type: string };
   status?: { type: string };
-}> = ({ text, status }) => {
+}> = ({ text, part, status }) => {
+  const content = text ?? part?.text;
   const isStreaming = status?.type === 'running';
 
-  if (!text && !isStreaming) return null;
+  if (!content && !isStreaming) return null;
 
   return (
-    <ReasoningRoot defaultOpen={isStreaming}>
-      <ReasoningTrigger isStreaming={isStreaming} />
-      <ReasoningContent>
-        {text ? (
-          <ReasoningText>{text}</ReasoningText>
-        ) : (
-          <div className="flex items-center gap-2 text-muted-foreground">
-            <span className="animate-pulse text-xs">Processing...</span>
-          </div>
-        )}
-      </ReasoningContent>
-    </ReasoningRoot>
+    <div className="py-1 first:pt-0 last:pb-0">
+      {content ? (
+        <ReasoningText>{content}</ReasoningText>
+      ) : (
+        <div className="flex items-center gap-2 text-muted-foreground">
+          <span className="animate-pulse text-xs">Processing...</span>
+        </div>
+      )}
+    </div>
   );
 };
 
-// ReasoningGroup - wraps consecutive reasoning parts
+// ReasoningGroup - wraps consecutive reasoning parts in a collapsible container
 export const ReasoningGroup: FC<
   PropsWithChildren<{
     startIndex: number;
     endIndex: number;
   }>
 > = ({ startIndex, endIndex, children }) => {
+  const { status } = useMessage();
+  const isStreaming = status?.type === 'running';
   const count = endIndex - startIndex + 1;
 
   return (
@@ -150,10 +83,19 @@ export const ReasoningGroup: FC<
           'relative overflow-hidden',
         )}
       >
-        <Brain size={12} className="relative z-10" />
+        {isStreaming && <ShimmerEffect />}
+        <Brain
+          size={12}
+          className={cn(isStreaming && 'animate-pulse', 'relative z-10')}
+        />
         <span className="relative z-10">
-          Reasoning ({count} step{count > 1 ? 's' : ''})
+          {isStreaming
+            ? 'Thinking...'
+            : `Reasoning (${count} step${count > 1 ? 's' : ''})`}
         </span>
+        {isStreaming && (
+          <span className="ml-2 h-1.5 w-1.5 rounded-full bg-purple-500 animate-pulse relative z-10" />
+        )}
         <ChevronDown
           size={12}
           className="ml-auto transition-transform duration-200 [[data-state=open]>&]:rotate-180 relative z-10"
@@ -163,27 +105,6 @@ export const ReasoningGroup: FC<
         <div className="pt-2 space-y-2">{children}</div>
       </CollapsibleContent>
     </Collapsible>
-  );
-};
-
-// Single reasoning step within a group (legacy support)
-export const ReasoningStep: FC<{
-  index: number;
-  text: string;
-  isStreaming?: boolean;
-}> = ({ index, text, isStreaming }) => {
-  return (
-    <div
-      className={cn(
-        'flex gap-2 p-2 rounded-md bg-purple-500/5',
-        isStreaming && 'animate-pulse',
-      )}
-    >
-      <span className="flex-shrink-0 w-4 h-4 rounded-full bg-purple-500/20 text-purple-600 dark:text-purple-400 flex items-center justify-center text-[10px] font-medium">
-        {index}
-      </span>
-      <div className="flex-1 whitespace-pre-wrap text-xs">{text}</div>
-    </div>
   );
 };
 

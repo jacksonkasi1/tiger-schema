@@ -25,15 +25,6 @@ import { toast } from 'sonner';
 
 // ** import ui components
 import { Button } from '@/components/ui/button';
-import {
-  Select,
-  SelectTrigger,
-  SelectValue,
-  SelectContent,
-  SelectItem,
-  SelectGroup,
-  SelectLabel,
-} from '@/components/ui/select';
 import { X, Undo2, Redo2, History } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import {
@@ -60,6 +51,12 @@ interface Model {
   id: string;
   name: string;
   enabled?: boolean;
+}
+
+export interface UnifiedModel {
+  id: string;
+  name: string;
+  provider: 'openai' | 'google';
 }
 
 export function AssistantSidebar({
@@ -100,49 +97,72 @@ export function AssistantSidebar({
   );
   const [historyIndex, setHistoryIndex] = useState(-1);
 
-  // Combine built-in (if fetched) + custom + default fallback
-  const availableOpenaiModels = useMemo(() => {
-    const models = openaiModels.filter((m) => m.enabled !== false);
+  // Combine and unify models
+  const allModels = useMemo(() => {
+    const models: UnifiedModel[] = [];
 
+    // OpenAI Models
+    const openAI = openaiModels.filter((m) => m.enabled !== false);
     customOpenaiModels.forEach((m) => {
-      if (!models.find((existing) => existing.id === m)) {
-        models.push({ id: m, name: m, enabled: true });
+      if (!openAI.find((existing) => existing.id === m)) {
+        openAI.push({ id: m, name: m, enabled: true });
       }
     });
-    if (models.length === 0) {
-      models.push({ id: 'gpt-4o-mini', name: 'GPT-4o mini', enabled: true });
-      models.push({ id: 'gpt-4o', name: 'GPT-4o', enabled: true });
+    if (openAI.length === 0) {
+      openAI.push({ id: 'gpt-4o-mini', name: 'GPT-4o mini', enabled: true });
+      openAI.push({ id: 'gpt-4o', name: 'GPT-4o', enabled: true });
     }
-    return models;
-  }, [openaiModels, customOpenaiModels]);
+    openAI.forEach((m) => models.push({ ...m, provider: 'openai' }));
 
-  const availableGoogleModels = useMemo(() => {
-    const models = googleModels.filter((m) => m.enabled !== false);
-
+    // Google Models
+    const google = googleModels.filter((m) => m.enabled !== false);
     customGoogleModels.forEach((m) => {
-      if (!models.find((existing) => existing.id === m)) {
-        models.push({ id: m, name: m, enabled: true });
+      if (!google.find((existing) => existing.id === m)) {
+        google.push({ id: m, name: m, enabled: true });
       }
     });
-    if (models.length === 0) {
-      models.push({
+    if (google.length === 0) {
+      google.push({
         id: 'gemini-1.5-pro-latest',
         name: 'Gemini 1.5 Pro',
         enabled: true,
       });
-      models.push({
+      google.push({
         id: 'gemini-1.5-flash-latest',
         name: 'Gemini 1.5 Flash',
         enabled: true,
       });
-      models.push({
+      google.push({
         id: 'gemini-2.0-flash-thinking-exp-01-21',
         name: 'Gemini 2.0 Flash Thinking',
         enabled: true,
       });
     }
+    google.forEach((m) => models.push({ ...m, provider: 'google' }));
+
     return models;
-  }, [googleModels, customGoogleModels]);
+  }, [openaiModels, googleModels, customOpenaiModels, customGoogleModels]);
+
+  const currentModel = useMemo(() => {
+    return (
+      allModels.find(
+        (m) =>
+          m.id === (aiProvider === 'openai' ? openaiModel : googleModel) &&
+          m.provider === aiProvider,
+      ) || allModels[0]
+    );
+  }, [allModels, aiProvider, openaiModel, googleModel]);
+
+  const handleModelChange = (modelId: string) => {
+    const model = allModels.find((m) => m.id === modelId);
+    if (!model) return;
+    setAiProvider(model.provider);
+    if (model.provider === 'openai') {
+      setOpenaiModel(model.id);
+    } else {
+      setGoogleModel(model.id);
+    }
+  };
 
   const setIsOpen = (value: boolean) => {
     onOpenChange?.(value);
@@ -306,31 +326,21 @@ export function AssistantSidebar({
     setHistoryIndex(-1);
   }, []);
 
-  const handleModelChange = (value: string) => {
-    if (aiProvider === 'openai') {
-      setOpenaiModel(value);
-    } else {
-      setGoogleModel(value);
-    }
-  };
-
-  const currentModelValue = aiProvider === 'openai' ? openaiModel : googleModel;
-
   if (!isOpen) return null;
 
   return (
     <div className="fixed inset-y-0 right-0 z-40 w-[400px] min-w-[320px] max-w-[50vw] bg-background border-l shadow-xl flex flex-col">
-      {/* Header */}
-      <div className="flex items-center justify-between px-4 py-3 border-b bg-muted/30">
-        <div className="flex items-center gap-2">
-          <h2 className="font-semibold text-sm">AI Assistant</h2>
-          <Badge variant="secondary" className="text-xs">
-            {aiProvider === 'google' ? 'Gemini' : 'OpenAI'}
-          </Badge>
-        </div>
-        <div className="flex items-center gap-1">
-          {/* Undo/Redo */}
-          <TooltipProvider>
+      <TooltipProvider>
+        {/* Header */}
+        <div className="flex items-center justify-between px-4 py-3 border-b bg-muted/30">
+          <div className="flex items-center gap-2">
+            <h2 className="font-semibold text-sm">AI Assistant</h2>
+            <Badge variant="secondary" className="text-xs">
+              {aiProvider === 'google' ? 'Gemini' : 'OpenAI'}
+            </Badge>
+          </div>
+          <div className="flex items-center gap-1">
+            {/* Undo/Redo */}
             <Tooltip>
               <TooltipTrigger asChild>
                 <Button
@@ -345,9 +355,7 @@ export function AssistantSidebar({
               </TooltipTrigger>
               <TooltipContent>Undo</TooltipContent>
             </Tooltip>
-          </TooltipProvider>
 
-          <TooltipProvider>
             <Tooltip>
               <TooltipTrigger asChild>
                 <Button
@@ -362,119 +370,80 @@ export function AssistantSidebar({
               </TooltipTrigger>
               <TooltipContent>Redo</TooltipContent>
             </Tooltip>
-          </TooltipProvider>
 
-          {/* History */}
-          <Popover>
-            <PopoverTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-8 w-8"
-                disabled={operationHistory.length === 0}
-              >
-                <History size={16} />
-              </Button>
-            </PopoverTrigger>
-            <PopoverContent className="w-64 p-2" align="end">
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-sm font-medium">History</span>
+            {/* History */}
+            <Popover>
+              <PopoverTrigger asChild>
                 <Button
                   variant="ghost"
-                  size="sm"
-                  onClick={clearHistory}
-                  className="h-6 text-xs"
+                  size="icon"
+                  className="h-8 w-8"
+                  disabled={operationHistory.length === 0}
                 >
-                  Clear
+                  <History size={16} />
                 </Button>
-              </div>
-              <div className="max-h-48 overflow-y-auto space-y-1">
-                {operationHistory.length === 0 ? (
-                  <p className="text-xs text-muted-foreground py-2 text-center">
-                    No operations yet
-                  </p>
-                ) : (
-                  operationHistory.map((op, i) => (
-                    <div
-                      key={op.id}
-                      className={cn(
-                        'text-xs p-2 rounded',
-                        i === historyIndex ? 'bg-primary/10' : 'hover:bg-muted',
-                      )}
-                    >
-                      <span className="text-muted-foreground">
-                        {new Date(op.timestamp).toLocaleTimeString()}
-                      </span>
-                    </div>
-                  ))
-                )}
-              </div>
-            </PopoverContent>
-          </Popover>
+              </PopoverTrigger>
+              <PopoverContent className="w-64 p-2" align="end">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-sm font-medium">History</span>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={clearHistory}
+                    className="h-6 text-xs"
+                  >
+                    Clear
+                  </Button>
+                </div>
+                <div className="max-h-48 overflow-y-auto space-y-1">
+                  {operationHistory.length === 0 ? (
+                    <p className="text-xs text-muted-foreground py-2 text-center">
+                      No operations yet
+                    </p>
+                  ) : (
+                    operationHistory.map((op, i) => (
+                      <div
+                        key={op.id}
+                        className={cn(
+                          'text-xs p-2 rounded',
+                          i === historyIndex
+                            ? 'bg-primary/10'
+                            : 'hover:bg-muted',
+                        )}
+                      >
+                        <span className="text-muted-foreground">
+                          {new Date(op.timestamp).toLocaleTimeString()}
+                        </span>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </PopoverContent>
+            </Popover>
 
-          {/* Close */}
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-8 w-8"
-            onClick={() => setIsOpen(false)}
-          >
-            <X size={16} />
-          </Button>
+            {/* Close */}
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8"
+              onClick={() => setIsOpen(false)}
+            >
+              <X size={16} />
+            </Button>
+          </div>
         </div>
-      </div>
 
-      {/* Model Selector */}
-      <div className="px-4 py-2 border-b bg-muted/20">
-        <div className="flex items-center gap-2">
-          <Select
-            value={aiProvider}
-            onValueChange={(v) => setAiProvider(v as 'openai' | 'google')}
-          >
-            <SelectTrigger className="h-8 w-24 text-xs">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="openai">OpenAI</SelectItem>
-              <SelectItem value="google">Google</SelectItem>
-            </SelectContent>
-          </Select>
-
-          <Select value={currentModelValue} onValueChange={handleModelChange}>
-            <SelectTrigger className="h-8 flex-1 text-xs">
-              <SelectValue placeholder="Select model" />
-            </SelectTrigger>
-            <SelectContent>
-              {aiProvider === 'openai' ? (
-                <SelectGroup>
-                  <SelectLabel>OpenAI Models</SelectLabel>
-                  {availableOpenaiModels.map((model) => (
-                    <SelectItem key={model.id} value={model.id}>
-                      {model.name}
-                    </SelectItem>
-                  ))}
-                </SelectGroup>
-              ) : (
-                <SelectGroup>
-                  <SelectLabel>Google Models</SelectLabel>
-                  {availableGoogleModels.map((model) => (
-                    <SelectItem key={model.id} value={model.id}>
-                      {model.name}
-                    </SelectItem>
-                  ))}
-                </SelectGroup>
-              )}
-            </SelectContent>
-          </Select>
+        {/* Assistant UI Thread */}
+        <div className="flex-1 overflow-hidden">
+          <AssistantRuntimeProvider runtime={runtime}>
+            <Thread
+              models={allModels}
+              currentModel={currentModel}
+              onModelChange={handleModelChange}
+            />
+          </AssistantRuntimeProvider>
         </div>
-      </div>
-
-      {/* Assistant UI Thread */}
-      <div className="flex-1 overflow-hidden">
-        <AssistantRuntimeProvider runtime={runtime}>
-          <Thread />
-        </AssistantRuntimeProvider>
-      </div>
+      </TooltipProvider>
     </div>
   );
 }

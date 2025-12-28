@@ -35,8 +35,34 @@ import {
   Zap,
 } from 'lucide-react';
 import type { FC } from 'react';
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectLabel,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { Badge } from '@/components/ui/badge';
 
-export const Thread: FC = () => {
+export interface UnifiedModel {
+  id: string;
+  name: string;
+  provider: 'openai' | 'google';
+}
+
+interface ThreadProps {
+  models?: UnifiedModel[];
+  currentModel?: UnifiedModel;
+  onModelChange?: (modelId: string) => void;
+}
+
+export const Thread: FC<ThreadProps> = ({
+  models = [],
+  currentModel,
+  onModelChange,
+}) => {
   return (
     <ThreadPrimitive.Root
       className="aui-root aui-thread-root @container flex h-full flex-col bg-background"
@@ -62,7 +88,11 @@ export const Thread: FC = () => {
 
         <ThreadPrimitive.ViewportFooter className="aui-thread-viewport-footer sticky bottom-0 mx-auto mt-auto flex w-full max-w-(--thread-max-width) flex-col gap-3 overflow-visible rounded-t-2xl bg-background pb-3">
           <ThreadScrollToBottom />
-          <Composer />
+          <Composer
+            models={models}
+            currentModel={currentModel}
+            onModelChange={onModelChange}
+          />
         </ThreadPrimitive.ViewportFooter>
       </ThreadPrimitive.Viewport>
     </ThreadPrimitive.Root>
@@ -170,19 +200,62 @@ const ThreadSuggestions: FC = () => {
   );
 };
 
-const Composer: FC = () => {
+const Composer: FC<ThreadProps> = ({ models, currentModel, onModelChange }) => {
   return (
-    <ComposerPrimitive.Root className="aui-composer-root relative flex w-full flex-col">
-      <ComposerPrimitive.AttachmentDropzone className="aui-composer-attachment-dropzone flex w-full flex-col rounded-xl border border-input bg-background px-1 pt-1.5 outline-none transition-shadow has-[textarea:focus-visible]:border-ring has-[textarea:focus-visible]:ring-2 has-[textarea:focus-visible]:ring-ring/20 data-[dragging=true]:border-ring data-[dragging=true]:border-dashed data-[dragging=true]:bg-accent/50">
+    <ComposerPrimitive.Root className="aui-composer-root relative flex w-full flex-col px-1">
+      <ComposerPrimitive.AttachmentDropzone className="aui-composer-attachment-dropzone flex w-full flex-col rounded-xl border border-input bg-background shadow-sm transition-shadow focus-within:ring-1 focus-within:ring-ring focus-within:border-ring">
         <ComposerAttachments />
         <ComposerPrimitive.Input
           placeholder="Ask about your schema..."
-          className="aui-composer-input mb-1 max-h-28 min-h-10 w-full resize-none bg-transparent px-3 pt-1.5 pb-2 text-sm outline-none placeholder:text-muted-foreground focus-visible:ring-0"
+          className="aui-composer-input min-h-[3rem] w-full resize-none bg-transparent px-3 py-3 text-sm outline-none placeholder:text-muted-foreground focus-visible:ring-0"
           rows={1}
           autoFocus
           aria-label="Message input"
         />
-        <ComposerAction />
+
+        <div className="flex items-center justify-between px-2 pb-2">
+          <div className="flex items-center gap-1">
+            <ComposerAddAttachment />
+
+            {models && models.length > 0 && currentModel && onModelChange && (
+              <Select value={currentModel.id} onValueChange={onModelChange}>
+                <SelectTrigger className="h-7 w-fit gap-1.5 rounded-md border-0 bg-muted/50 px-2 text-xs font-medium hover:bg-muted focus:ring-0">
+                  <span className="text-muted-foreground/70">
+                    {currentModel.provider === 'google' ? 'Gemini' : 'OpenAI'}
+                  </span>
+                  <span className="w-px h-3 bg-border" />
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent align="start">
+                  <SelectGroup>
+                    <SelectLabel>OpenAI Models</SelectLabel>
+                    {models
+                      .filter((m) => m.provider === 'openai')
+                      .map((m) => (
+                        <SelectItem key={m.id} value={m.id} className="text-xs">
+                          {m.name}
+                        </SelectItem>
+                      ))}
+                  </SelectGroup>
+                  <SelectGroup>
+                    <SelectLabel>Google Models</SelectLabel>
+                    {models
+                      .filter((m) => m.provider === 'google')
+                      .map((m) => (
+                        <SelectItem key={m.id} value={m.id} className="text-xs">
+                          {m.name}
+                        </SelectItem>
+                      ))}
+                  </SelectGroup>
+                </SelectContent>
+              </Select>
+            )}
+          </div>
+
+          <div className="flex items-center gap-1">
+            <ComposerAction />
+          </div>
+        </div>
       </ComposerPrimitive.AttachmentDropzone>
     </ComposerPrimitive.Root>
   );
@@ -190,21 +263,19 @@ const Composer: FC = () => {
 
 const ComposerAction: FC = () => {
   return (
-    <div className="aui-composer-action-wrapper relative mx-1.5 mb-1.5 flex items-center justify-between">
-      <ComposerAddAttachment />
-
+    <>
       <AssistantIf condition={({ thread }) => !thread.isRunning}>
         <ComposerPrimitive.Send asChild>
           <TooltipIconButton
             tooltip="Send message"
-            side="bottom"
+            side="top"
             type="submit"
             variant="default"
             size="icon"
-            className="aui-composer-send size-7 rounded-full"
+            className="aui-composer-send size-7 rounded-lg transition-all"
             aria-label="Send message"
           >
-            <ArrowUpIcon className="aui-composer-send-icon size-3.5" />
+            <ArrowUpIcon className="aui-composer-send-icon size-4" />
           </TooltipIconButton>
         </ComposerPrimitive.Send>
       </AssistantIf>
@@ -215,14 +286,14 @@ const ComposerAction: FC = () => {
             type="button"
             variant="default"
             size="icon"
-            className="aui-composer-cancel size-7 rounded-full"
+            className="aui-composer-cancel size-7 rounded-lg transition-all"
             aria-label="Stop generating"
           >
-            <SquareIcon className="aui-composer-cancel-icon size-2.5 fill-current" />
+            <SquareIcon className="aui-composer-cancel-icon size-3 fill-current" />
           </Button>
         </ComposerPrimitive.Cancel>
       </AssistantIf>
-    </div>
+    </>
   );
 };
 
