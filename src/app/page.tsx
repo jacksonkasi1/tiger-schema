@@ -7,6 +7,7 @@ import { ChatSidebar } from '@/components/ChatSidebar';
 import { FlowCanvas } from '@/components/flow/FlowCanvas';
 import { ImportSQL } from '@/components/ImportSQL';
 import { SearchBar } from '@/components/SearchBar';
+import { SchemaSidebar } from '@/components/schema/SchemaSidebar';
 import { Button } from '@/components/ui/button';
 import { Upload, Trash2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -30,8 +31,8 @@ export default function HomePage() {
     const initialSize = getStorageSize();
     console.log(
       `[App Init] localStorage size: ${(initialSize / 1024 / 1024).toFixed(
-        2
-      )}MB`
+        2,
+      )}MB`,
     );
 
     // Auto-clean corrupted/bloated data
@@ -42,12 +43,12 @@ export default function HomePage() {
       const saved = initialSize - finalSize;
       console.log(
         `[App Init] Cleaned ${(saved / 1024 / 1024).toFixed(
-          2
-        )}MB of corrupted data`
+          2,
+        )}MB of corrupted data`,
       );
       toast.success('Cache Cleaned', {
         description: `Removed ${(saved / 1024 / 1024).toFixed(
-          2
+          2,
         )}MB of corrupted data`,
         duration: 3000,
       });
@@ -62,10 +63,10 @@ export default function HomePage() {
       console.log('  window.memoryMonitor.start() - Start monitoring');
       console.log('  window.memoryMonitor.stop() - Stop and show summary');
       console.log(
-        '  window.memoryMonitor.logLocalStorage() - Show localStorage usage'
+        '  window.memoryMonitor.logLocalStorage() - Show localStorage usage',
       );
       console.log(
-        '  window.memoryMonitor.forceGC() - Force garbage collection (needs --expose-gc)'
+        '  window.memoryMonitor.forceGC() - Force garbage collection (needs --expose-gc)',
       );
     }
   }, []);
@@ -101,7 +102,7 @@ export default function HomePage() {
     if (Object.keys(tables).length > 0) {
       // Confirm if there's data
       const confirmed = window.confirm(
-        'Clear all cached data? This will remove all saved schemas and reset the canvas.'
+        'Clear all cached data? This will remove all saved schemas and reset the canvas.',
       );
       if (!confirmed) return;
     }
@@ -115,7 +116,7 @@ export default function HomePage() {
     <div className="relative w-full h-screen overflow-hidden">
       <div
         className={cn(
-          'absolute inset-0 transition-all duration-300 ease-in-out'
+          'absolute inset-0 transition-all duration-300 ease-in-out',
         )}
       >
         {/* Action buttons - bottom left */}
@@ -150,6 +151,7 @@ export default function HomePage() {
         />
         <FlowCanvas />
       </div>
+      <SchemaSidebar />
       <ChatSidebar isOpen={isChatOpen} onOpenChange={setIsChatOpen} />
       <ImportSQL open={isImportOpen} onClose={() => setIsImportOpen(false)} />
     </div>

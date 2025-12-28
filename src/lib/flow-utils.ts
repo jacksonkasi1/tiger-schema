@@ -1,6 +1,12 @@
+// ** import types
 import { Table, TableState } from './types';
-import { FlowNode, FlowEdge } from '@/types/flow';
+import { FlowNode, FlowEdge, RelationshipType } from '@/types/flow';
+
+// ** import core packages
 import { MarkerType } from '@xyflow/react';
+
+// ** import utils
+import { debugLog } from './debug';
 
 /**
  * Convert table state to ReactFlow nodes
@@ -18,6 +24,7 @@ export function tablesToNodes(tables: TableState): FlowNode[] {
         columns: table.columns || [],
         is_view: table.is_view,
         schema: table.schema, // Include schema in node data (undefined if no schema)
+        color: table.color, // Include color for table header
       },
     };
   });
@@ -29,17 +36,22 @@ export function tablesToNodes(tables: TableState): FlowNode[] {
 export function tablesToEdges(tables: TableState): FlowEdge[] {
   const edges: FlowEdge[] = [];
 
+  debugLog.log('[tablesToEdges] Processing tables:', Object.keys(tables));
+
   Object.values(tables).forEach((table) => {
     if (!table.columns) return;
 
     table.columns.forEach((column, sourceIndex) => {
       if (column.fk) {
+        debugLog.log(
+          `[tablesToEdges] Found FK: ${table.title}.${column.title} -> ${column.fk}`,
+        );
         // Parse FK format: "schema.table.column" or "table.column"
         const fkParts = column.fk.split('.');
 
         if (fkParts.length < 2) {
-          console.warn(
-            `Invalid FK format for column ${column.title} in table ${table.title}: ${column.fk}`
+          debugLog.warn(
+            `Invalid FK format for column ${column.title} in table ${table.title}: ${column.fk}`,
           );
           return;
         }
@@ -58,30 +70,55 @@ export function tablesToEdges(tables: TableState): FlowEdge[] {
         }
 
         // Build target table key - only include schema if present
-        const targetTableKey = targetSchema ? `${targetSchema}.${targetTableName}` : targetTableName;
+        const targetTableKeyWithSchema = targetSchema
+          ? `${targetSchema}.${targetTableName}`
+          : targetTableName;
 
-        const edgeId = `${table.title}.${column.title}-${targetTableKey}.${targetColumn}`;
+        const edgeId = `${table.title}.${column.title}-${targetTableKeyWithSchema}.${targetColumn}`;
 
-        // Find target column index in target table
-        const targetTableData = tables[targetTableKey];
+        // Try to find target table - may be stored with or without schema prefix
+        // Tables created by AI typically use just the table name as key
+        let targetTableData = tables[targetTableKeyWithSchema];
+        let actualTargetKey = targetTableKeyWithSchema;
+
+        // If not found with schema, try just the table name
+        if (!targetTableData && targetTableName) {
+          targetTableData = tables[targetTableName];
+          actualTargetKey = targetTableName;
+        }
+
+        // Also try finding by matching table.title
+        if (!targetTableData) {
+          const entry = Object.entries(tables).find(
+            ([, t]) => t.title === targetTableName
+          );
+          if (entry) {
+            targetTableData = entry[1];
+            actualTargetKey = entry[1].title; // Use title for node ID matching
+          }
+        }
+
         const targetIndex =
-          targetTableData?.columns?.findIndex((col) => col.title === targetColumn) ?? -1;
+          targetTableData?.columns?.findIndex(
+            (col) => col.title === targetColumn,
+          ) ?? -1;
 
         if (targetIndex === -1) {
-          console.warn(
-            `Target column ${targetColumn} not found in table ${targetTableKey}`
+          debugLog.warn(
+            `Target column ${targetColumn} not found in table ${actualTargetKey}`,
           );
           return;
         }
 
         // Create unique handle IDs matching TableNode format: tableName_columnName_index
+        // IMPORTANT: Use table.title for node IDs (matches tablesToNodes)
         const sourceHandleId = `${table.title}_${column.title}_${sourceIndex}`;
-        const targetHandleId = `${targetTableKey}_${targetColumn}_${targetIndex}`;
+        const targetHandleId = `${targetTableData.title}_${targetColumn}_${targetIndex}`;
 
-        edges.push({
+        const newEdge = {
           id: edgeId,
-          source: table.title,
-          target: targetTableKey,
+          source: table.title, // Node ID uses table.title
+          target: targetTableData.title, // Node ID uses table.title (not key with schema)
           sourceHandle: sourceHandleId,
           targetHandle: targetHandleId,
           type: 'smoothstep',
@@ -95,20 +132,36 @@ export function tablesToEdges(tables: TableState): FlowEdge[] {
           data: {
             sourceColumn: column.title,
             targetColumn: targetColumn,
-            relationshipType: 'one-to-many',
+            relationshipType: 'one-to-many' as RelationshipType,
           },
+        };
+
+        debugLog.log('[tablesToEdges] Creating edge:', {
+          id: edgeId,
+          source: table.title,
+          target: targetTableData.title,
+          sourceHandle: sourceHandleId,
+          targetHandle: targetHandleId,
         });
+
+        edges.push(newEdge);
       }
     });
   });
 
+  debugLog.log(
+    `[tablesToEdges] Total edges created: ${edges.length}`,
+    edges.map((e) => e.id),
+  );
   return edges;
 }
 
 /**
  * Extract position from ReactFlow nodes back to table format
  */
-export function nodesToPositions(nodes: FlowNode[]): Record<string, { x: number; y: number }> {
+export function nodesToPositions(
+  nodes: FlowNode[],
+): Record<string, { x: number; y: number }> {
   const positions: Record<string, { x: number; y: number }> = {};
 
   nodes.forEach((node) => {
@@ -132,26 +185,24 @@ export function calculateNodeDimensions(table: Table) {
   const maxWidth = 400;
 
   const columnsCount = table.columns?.length || 0;
-  const height = headerHeight + (columnsCount * columnHeight) + padding;
+  const height = headerHeight + columnsCount * columnHeight + padding;
 
   // Calculate width based on longest text
   const titleLength = table.title?.length || 0;
-  const columnLengths = table.columns?.map(col => {
-    const colTitleLength = col?.title?.length || 0;
-    const colFormatLength = col?.format?.length || 0;
-    return colTitleLength + colFormatLength;
-  }) || [];
+  const columnLengths =
+    table.columns?.map((col) => {
+      const colTitleLength = col?.title?.length || 0;
+      const colFormatLength = col?.format?.length || 0;
+      return colTitleLength + colFormatLength;
+    }) || [];
 
   const longestText = Math.max(
     titleLength,
     ...columnLengths,
-    0 // Ensure at least 0
+    0, // Ensure at least 0
   );
 
-  const width = Math.min(
-    Math.max(minWidth, longestText * 8),
-    maxWidth
-  );
+  const width = Math.min(Math.max(minWidth, longestText * 8), maxWidth);
 
   return { width, height };
 }
@@ -161,7 +212,7 @@ export function calculateNodeDimensions(table: Table) {
  */
 export function findConnectedTables(
   tableName: string,
-  tables: TableState
+  tables: TableState,
 ): Set<string> {
   const connected = new Set<string>();
 
@@ -198,10 +249,10 @@ export function findConnectedTables(
  */
 export function getConnectedEdges(
   nodeId: string,
-  edges: FlowEdge[]
+  edges: FlowEdge[],
 ): FlowEdge[] {
   return edges.filter(
-    (edge) => edge.source === nodeId || edge.target === nodeId
+    (edge) => edge.source === nodeId || edge.target === nodeId,
   );
 }
 
@@ -209,7 +260,9 @@ export function getConnectedEdges(
  * Group tables by schema
  * Only groups tables that have an explicit schema defined
  */
-export function groupTablesBySchema(tables: TableState): Record<string, string[]> {
+export function groupTablesBySchema(
+  tables: TableState,
+): Record<string, string[]> {
   const groups: Record<string, string[]> = {};
 
   Object.values(tables).forEach((table) => {
@@ -248,12 +301,12 @@ export function getAllSchemas(tables: TableState): string[] {
 export function calculateSchemaBoundingBox(
   schemaName: string,
   tables: TableState,
-  padding: number = 40
+  padding: number = 40,
 ): { x: number; y: number; width: number; height: number } | null {
   // Get all tables in this schema
   // Only match tables that have this schema explicitly defined
   const schemaTables = Object.values(tables).filter(
-    (table) => table.schema === schemaName
+    (table) => table.schema === schemaName,
   );
 
   if (schemaTables.length === 0) {
@@ -279,7 +332,7 @@ export function calculateSchemaBoundingBox(
   return {
     x: minX - padding,
     y: minY - padding,
-    width: maxX - minX + (padding * 2),
-    height: maxY - minY + (padding * 2),
+    width: maxX - minX + padding * 2,
+    height: maxY - minY + padding * 2,
   };
 }

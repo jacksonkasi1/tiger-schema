@@ -9,12 +9,12 @@ function parseEnumTypes(statements: string[]): Map<string, string[]> {
 
   for (const statement of statements) {
     const trimmed = statement.trim();
-    
+
     // Match: CREATE TYPE type_name AS ENUM ('value1', 'value2', ...)
     // Also handle schema-qualified: CREATE TYPE schema.type_name AS ENUM (...)
     // Handle underscores in type names (e.g., post_status, user_role)
     const enumMatch = trimmed.match(
-      /create\s+type\s+(?:if\s+not\s+exists\s+)?(?:["']?([a-zA-Z_][a-zA-Z0-9_]*)["']?\.)?["']?([a-zA-Z_][a-zA-Z0-9_]*)["']?\s+as\s+enum\s*\(([^)]+)\)/i
+      /create\s+type\s+(?:if\s+not\s+exists\s+)?(?:["']?([a-zA-Z_][a-zA-Z0-9_]*)["']?\.)?["']?([a-zA-Z_][a-zA-Z0-9_]*)["']?\s+as\s+enum\s*\(([^)]+)\)/i,
     );
 
     if (enumMatch) {
@@ -31,7 +31,9 @@ function parseEnumTypes(statements: string[]): Map<string, string[]> {
       }
 
       // Store with schema prefix if present
-      const fullEnumName = schemaName ? `${schemaName}.${enumTypeName}` : enumTypeName;
+      const fullEnumName = schemaName
+        ? `${schemaName}.${enumTypeName}`
+        : enumTypeName;
       if (values.length > 0) {
         enumTypes.set(fullEnumName, values);
         // Also store without schema for easier lookup
@@ -55,7 +57,7 @@ export async function parseSQLSchemaAsync(sql: string): Promise<TableState> {
     .replace(/--[^\n]*/g, '')
     .replace(/\/\*[\s\S]*?\*\//g, '');
 
-  const statements = cleanedSQL.split(';').filter(s => s.trim());
+  const statements = cleanedSQL.split(';').filter((s) => s.trim());
 
   console.log(`[SQL Parser] Processing ${statements.length} statements...`);
 
@@ -71,14 +73,14 @@ export async function parseSQLSchemaAsync(sql: string): Promise<TableState> {
     const batch = statements.slice(i, i + BATCH_SIZE);
 
     // Yield control to browser every batch
-    await new Promise(resolve => setTimeout(resolve, 0));
+    await new Promise((resolve) => setTimeout(resolve, 0));
 
     for (const statement of batch) {
       const trimmed = statement.trim();
 
       // CREATE TABLE
       const createTableMatch = trimmed.match(
-        /create\s+table\s+(?:if\s+not\s+exists\s+)?(?:["']?(\w+)["']?\.)?["']?(\w+)["']?\s*\(/i
+        /create\s+table\s+(?:if\s+not\s+exists\s+)?(?:["']?(\w+)["']?\.)?["']?(\w+)["']?\s*\(/i,
       );
 
       if (createTableMatch) {
@@ -93,13 +95,13 @@ export async function parseSQLSchemaAsync(sql: string): Promise<TableState> {
           is_view: false,
           columns: columns,
           position: { x: 0, y: 0 },
-          schema: schemaName // undefined if no schema specified
+          schema: schemaName, // undefined if no schema specified
         };
       }
 
       // CREATE VIEW
       const createViewMatch = trimmed.match(
-        /create\s+(?:or\s+replace\s+)?view\s+(?:if\s+not\s+exists\s+)?(?:["']?(\w+)["']?\.)?["']?(\w+)["']?\s+as/i
+        /create\s+(?:or\s+replace\s+)?view\s+(?:if\s+not\s+exists\s+)?(?:["']?(\w+)["']?\.)?["']?(\w+)["']?\s+as/i,
       );
 
       if (createViewMatch) {
@@ -113,14 +115,16 @@ export async function parseSQLSchemaAsync(sql: string): Promise<TableState> {
           is_view: true,
           columns: [],
           position: { x: 0, y: 0 },
-          schema: schemaName // undefined if no schema specified
+          schema: schemaName, // undefined if no schema specified
         };
       }
     }
 
     // Log progress every 50 statements
     if (i % 50 === 0 && i > 0) {
-      console.log(`[SQL Parser] Processed ${i}/${statements.length} statements...`);
+      console.log(
+        `[SQL Parser] Processed ${i}/${statements.length} statements...`,
+      );
     }
   }
 
@@ -130,12 +134,14 @@ export async function parseSQLSchemaAsync(sql: string): Promise<TableState> {
   for (let i = 0; i < statements.length; i += BATCH_SIZE) {
     const batch = statements.slice(i, i + BATCH_SIZE);
 
-    await new Promise(resolve => setTimeout(resolve, 0));
+    await new Promise((resolve) => setTimeout(resolve, 0));
 
     for (const statement of batch) {
       const trimmed = statement.trim();
 
-      const alterTableMatch = trimmed.match(/alter\s+table\s+(?:["']?(\w+)["']?\.)?["']?(\w+)["']?/i);
+      const alterTableMatch = trimmed.match(
+        /alter\s+table\s+(?:["']?(\w+)["']?\.)?["']?(\w+)["']?/i,
+      );
 
       if (alterTableMatch) {
         const schemaName = alterTableMatch[1]; // undefined if no schema specified
@@ -165,7 +171,7 @@ export function parseSQLSchema(sql: string): TableState {
     .replace(/\/\*[\s\S]*?\*\//g, ''); // Remove multi-line comments
 
   // Split into individual statements
-  const statements = cleanedSQL.split(';').filter(s => s.trim());
+  const statements = cleanedSQL.split(';').filter((s) => s.trim());
 
   // First pass: Parse enum types
   const enumTypes = parseEnumTypes(statements);
@@ -176,7 +182,7 @@ export function parseSQLSchema(sql: string): TableState {
     // Match CREATE TABLE statements
     // Improved regex to handle schema prefixes (e.g., public.users) and quoted identifiers
     const createTableMatch = trimmed.match(
-      /create\s+table\s+(?:if\s+not\s+exists\s+)?(?:["']?(\w+)["']?\.)?["']?(\w+)["']?\s*\(/i
+      /create\s+table\s+(?:if\s+not\s+exists\s+)?(?:["']?(\w+)["']?\.)?["']?(\w+)["']?\s*\(/i,
     );
 
     if (createTableMatch) {
@@ -193,14 +199,14 @@ export function parseSQLSchema(sql: string): TableState {
         is_view: false,
         columns: columns,
         position: { x: 0, y: 0 },
-        schema: schemaName // undefined if no schema specified
+        schema: schemaName, // undefined if no schema specified
       };
     }
 
     // Match CREATE VIEW statements
     // Improved regex to handle schema prefixes and quoted identifiers
     const createViewMatch = trimmed.match(
-      /create\s+(?:or\s+replace\s+)?view\s+(?:if\s+not\s+exists\s+)?(?:["']?(\w+)["']?\.)?["']?(\w+)["']?\s+as/i
+      /create\s+(?:or\s+replace\s+)?view\s+(?:if\s+not\s+exists\s+)?(?:["']?(\w+)["']?\.)?["']?(\w+)["']?\s+as/i,
     );
 
     if (createViewMatch) {
@@ -214,7 +220,7 @@ export function parseSQLSchema(sql: string): TableState {
         is_view: true,
         columns: [],
         position: { x: 0, y: 0 },
-        schema: schemaName // undefined if no schema specified
+        schema: schemaName, // undefined if no schema specified
       };
     }
   }
@@ -224,7 +230,9 @@ export function parseSQLSchema(sql: string): TableState {
     const trimmed = statement.trim();
 
     // Match ALTER TABLE statements (handle schema prefixes like public.users or just users)
-    const alterTableMatch = trimmed.match(/alter\s+table\s+(?:["']?(\w+)["']?\.)?["']?(\w+)["']?/i);
+    const alterTableMatch = trimmed.match(
+      /alter\s+table\s+(?:["']?(\w+)["']?\.)?["']?(\w+)["']?/i,
+    );
 
     if (alterTableMatch) {
       const schemaName = alterTableMatch[1]; // undefined if no schema specified
@@ -247,7 +255,10 @@ export function parseSQLSchema(sql: string): TableState {
 /**
  * Parse columns from CREATE TABLE statement
  */
-function parseColumns(createStatement: string, enumTypes: Map<string, string[]> = new Map()): Column[] {
+function parseColumns(
+  createStatement: string,
+  enumTypes: Map<string, string[]> = new Map(),
+): Column[] {
   const columns: Column[] = [];
 
   // Extract the content between parentheses
@@ -285,11 +296,14 @@ function parseColumns(createStatement: string, enumTypes: Map<string, string[]> 
 /**
  * Parse a single column definition
  */
-function parseColumnDefinition(def: string, enumTypes: Map<string, string[]> = new Map()): Column | null {
+function parseColumnDefinition(
+  def: string,
+  enumTypes: Map<string, string[]> = new Map(),
+): Column | null {
   // Extract column name (supporting quoted identifiers with spaces/special chars)
   // Matches: "column name", 'column name', or unquoted_column_name
   const nameMatch = def.match(
-    /^("([^"]+)"|'([^']+)'|([A-Za-z_][A-Za-z0-9_]*))\s+(.+)/i
+    /^("([^"]+)"|'([^']+)'|([A-Za-z_][A-Za-z0-9_]*))\s+(.+)/i,
   );
 
   if (!nameMatch) return null;
@@ -299,27 +313,40 @@ function parseColumnDefinition(def: string, enumTypes: Map<string, string[]> = n
     nameMatch[2] !== undefined
       ? nameMatch[2] // double-quoted
       : nameMatch[3] !== undefined
-      ? nameMatch[3] // single-quoted
-      : nameMatch[4]; // unquoted
+        ? nameMatch[3] // single-quoted
+        : nameMatch[4]; // unquoted
 
   const rest = nameMatch[5];
 
   // Extract data type - handle enum types (may be schema-qualified)
   // PostgreSQL enum columns are defined as: column_name enum_type_name
   // Or: column_name schema.enum_type_name
+  // Array syntax: column_name enum_type_name[] or schema.enum_type_name[]
   let dataType: string;
   let enumTypeName: string | undefined;
   let enumValues: string[] | undefined = undefined;
+  let isArray = false;
+
+  // Check for array suffix [] in the rest of the definition
+  // Match patterns like: type_name[], schema.type_name[], "type_name"[]
+  const arrayMatch = rest.match(
+    /^(["']?[a-zA-Z_][a-zA-Z0-9_]*["']?(?:\.["']?[a-zA-Z_][a-zA-Z0-9_]*["']?)?)\s*\[\s*\]/i,
+  );
+  if (arrayMatch) {
+    isArray = true;
+  }
 
   // Extract data type - handle enum types and regular types
   // First check if it's a schema-qualified type (schema.type)
-  const schemaQualifiedMatch = rest.match(/^["']?(\w+)["']?\.["']?(\w+)["']?/i);
-  
+  const schemaQualifiedMatch = rest.match(
+    /^["']?(\w+)["']?\.["']?(\w+)["']?\s*(?:\[\s*\])?/i,
+  );
+
   if (schemaQualifiedMatch) {
     const schemaName = schemaQualifiedMatch[1];
     const typeName = schemaQualifiedMatch[2];
     const fullTypeName = `${schemaName}.${typeName}`;
-    
+
     // Check if this matches an enum type
     if (enumTypes.has(fullTypeName)) {
       dataType = 'enum';
@@ -334,29 +361,33 @@ function parseColumnDefinition(def: string, enumTypes: Map<string, string[]> = n
     }
   } else {
     // Single type name (no schema) - extract type name up to constraints
-    // Match type name (can include underscores) - stop at DEFAULT, NOT NULL, etc.
+    // Match type name (can include underscores) - stop at [], DEFAULT, NOT NULL, etc.
     // First, try to extract just the type name before any constraints
-    const typeNameMatch = rest.match(/^([a-zA-Z_][a-zA-Z0-9_]*)(?:\s+(?:DEFAULT|NOT|NULL|PRIMARY|UNIQUE|CHECK|REFERENCES|CONSTRAINT)|$)/i);
-    
+    const typeNameMatch = rest.match(
+      /^([a-zA-Z_][a-zA-Z0-9_]*)\s*(?:\[\s*\])?(?:\s+(?:DEFAULT|NOT|NULL|PRIMARY|UNIQUE|CHECK|REFERENCES|CONSTRAINT)|$)/i,
+    );
+
     if (typeNameMatch) {
       const extractedType = typeNameMatch[1];
-      
+
       // Check if it's an enum type
       if (enumTypes.has(extractedType)) {
         dataType = 'enum';
         enumTypeName = extractedType;
         enumValues = enumTypes.get(extractedType);
       } else {
-        // Regular type - extract with possible size constraints like varchar(255)
-        const fullTypeMatch = rest.match(/^([a-zA-Z_][a-zA-Z0-9_]*)(?:\s*\([\d,\s]+\))?/i);
+        // Regular type - extract with possible size constraints like varchar(255) or array []
+        const fullTypeMatch = rest.match(
+          /^([a-zA-Z_][a-zA-Z0-9_]*)(?:\s*\([\d,\s]+\))?\s*(?:\[\s*\])?/i,
+        );
         if (!fullTypeMatch) return null;
-        dataType = fullTypeMatch[0].trim();
+        dataType = fullTypeMatch[0].trim().replace(/\s*\[\s*\]\s*$/, ''); // Remove array suffix from dataType
       }
     } else {
       // Fallback: try simple word match
       const simpleMatch = rest.match(/^([a-zA-Z_][a-zA-Z0-9_]*)/i);
       if (!simpleMatch) return null;
-      
+
       const extractedType = simpleMatch[1];
       if (enumTypes.has(extractedType)) {
         dataType = 'enum';
@@ -364,9 +395,11 @@ function parseColumnDefinition(def: string, enumTypes: Map<string, string[]> = n
         enumValues = enumTypes.get(extractedType);
       } else {
         // Regular type
-        const fullTypeMatch = rest.match(/^([a-zA-Z_][a-zA-Z0-9_]*)(?:\s*\([\d,\s]+\))?/i);
+        const fullTypeMatch = rest.match(
+          /^([a-zA-Z_][a-zA-Z0-9_]*)(?:\s*\([\d,\s]+\))?\s*(?:\[\s*\])?/i,
+        );
         if (!fullTypeMatch) return null;
-        dataType = fullTypeMatch[0].trim();
+        dataType = fullTypeMatch[0].trim().replace(/\s*\[\s*\]\s*$/, ''); // Remove array suffix from dataType
       }
     }
   }
@@ -377,7 +410,9 @@ function parseColumnDefinition(def: string, enumTypes: Map<string, string[]> = n
 
   // Check for foreign key reference
   let foreignKey: string | undefined;
-  const fkMatch = rest.match(/references\s+["']?(\w+)["']?\s*\(["']?(\w+)["']?\)/i);
+  const fkMatch = rest.match(
+    /references\s+["']?(\w+)["']?\s*\(["']?(\w+)["']?\)/i,
+  );
   if (fkMatch) {
     foreignKey = `${fkMatch[1]}.${fkMatch[2]}`;
   }
@@ -386,14 +421,16 @@ function parseColumnDefinition(def: string, enumTypes: Map<string, string[]> = n
   let defaultValue: any;
   // Match quoted strings, parenthesized expressions, or unquoted values
   const defaultMatch = rest.match(
-    /default\s+((?:'[^']*'|"[^"]*"|\([^)]+\)|[^,\s]+(?:\s*[^,]*?)))/i
+    /default\s+((?:'[^']*'|"[^"]*"|\([^)]+\)|[^,\s]+(?:\s*[^,]*?)))/i,
   );
 
   if (defaultMatch) {
     let val = defaultMatch[1].trim();
     // Remove surrounding quotes if present for string literals
-    if ((val.startsWith("'") && val.endsWith("'")) ||
-        (val.startsWith('"') && val.endsWith('"'))) {
+    if (
+      (val.startsWith("'") && val.endsWith("'")) ||
+      (val.startsWith('"') && val.endsWith('"'))
+    ) {
       val = val.slice(1, -1);
     }
     defaultValue = val;
@@ -411,7 +448,8 @@ function parseColumnDefinition(def: string, enumTypes: Map<string, string[]> = n
     pk: isPrimaryKey,
     fk: foreignKey,
     enumTypeName: enumTypeName,
-    enumValues: enumValues
+    enumValues: enumValues,
+    isArray: isArray || undefined, // Only set if true
   };
 }
 
@@ -419,9 +457,15 @@ function parseColumnDefinition(def: string, enumTypes: Map<string, string[]> = n
  * Parse foreign keys from ALTER TABLE statements
  * @param tableKey - Schema-qualified key (e.g., "public.posts" or "auth.users")
  */
-function parseForeignKeysFromAlter(tables: TableState, tableKey: string, alterStmt: string): void {
+function parseForeignKeysFromAlter(
+  tables: TableState,
+  tableKey: string,
+  alterStmt: string,
+): void {
   // Match: ALTER TABLE "table" ADD CONSTRAINT "name" FOREIGN KEY("col") REFERENCES "ref_table"("ref_col")
-  const fkMatch = alterStmt.match(/add\s+constraint\s+["']?\w+["']?\s+foreign\s+key\s*\(["']?(\w+)["']?\)\s*references\s+["']?(\w+)["']?\s*\(["']?(\w+)["']?\)/i);
+  const fkMatch = alterStmt.match(
+    /add\s+constraint\s+["']?\w+["']?\s+foreign\s+key\s*\(["']?(\w+)["']?\)\s*references\s+["']?(\w+)["']?\s*\(["']?(\w+)["']?\)/i,
+  );
 
   if (fkMatch && tables[tableKey]) {
     const columnName = fkMatch[1];
@@ -429,7 +473,9 @@ function parseForeignKeysFromAlter(tables: TableState, tableKey: string, alterSt
     const refColumn = fkMatch[3];
 
     // Find the column and add FK reference
-    const column = tables[tableKey].columns?.find(c => c.title === columnName);
+    const column = tables[tableKey].columns?.find(
+      (c) => c.title === columnName,
+    );
     if (column) {
       column.fk = `${refTable}.${refColumn}`;
     }
@@ -440,7 +486,11 @@ function parseForeignKeysFromAlter(tables: TableState, tableKey: string, alterSt
  * Parse primary keys from ALTER TABLE statements
  * @param tableKey - Schema-qualified key (e.g., "public.posts" or "auth.users")
  */
-function parsePrimaryKeysFromAlter(tables: TableState, tableKey: string, alterStmt: string): void {
+function parsePrimaryKeysFromAlter(
+  tables: TableState,
+  tableKey: string,
+  alterStmt: string,
+): void {
   // Match: ALTER TABLE "table" ADD PRIMARY KEY("col")
   const pkMatch = alterStmt.match(/add\s+primary\s+key\s*\(["']?(\w+)["']?\)/i);
 
@@ -448,7 +498,9 @@ function parsePrimaryKeysFromAlter(tables: TableState, tableKey: string, alterSt
     const columnName = pkMatch[1];
 
     // Find the column and mark as primary key
-    const column = tables[tableKey].columns?.find(c => c.title === columnName);
+    const column = tables[tableKey].columns?.find(
+      (c) => c.title === columnName,
+    );
     if (column) {
       column.pk = true;
       column.required = true;
@@ -509,7 +561,8 @@ function mapPostgreSQLType(pgType: string): string {
   if (type.includes('float')) return 'float8'; // FLOAT(n) maps to float8
 
   // String types
-  if (type.includes('varchar') || type.includes('character varying')) return 'varchar';
+  if (type.includes('varchar') || type.includes('character varying'))
+    return 'varchar';
   if (type.includes('char') || type.includes('character')) return 'char';
   if (type === 'text') return 'text';
 
@@ -555,7 +608,12 @@ function determineType(format: string): string {
   }
 
   // Numeric types
-  if (f.includes('int') || f.includes('serial') || f === 'numeric' || f.includes('float')) {
+  if (
+    f.includes('int') ||
+    f.includes('serial') ||
+    f === 'numeric' ||
+    f.includes('float')
+  ) {
     return 'number';
   }
 

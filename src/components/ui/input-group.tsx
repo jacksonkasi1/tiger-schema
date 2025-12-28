@@ -36,6 +36,23 @@ const InputGroupTextarea = React.forwardRef<
 })
 InputGroupTextarea.displayName = "InputGroupTextarea"
 
+const InputGroupInput = React.forwardRef<
+  HTMLInputElement,
+  React.InputHTMLAttributes<HTMLInputElement>
+>(({ className, ...props }, ref) => {
+  return (
+    <input
+      ref={ref}
+      className={cn(
+        "flex-1 border-0 bg-transparent px-2 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-0 disabled:cursor-not-allowed disabled:opacity-50",
+        className
+      )}
+      {...props}
+    />
+  )
+})
+InputGroupInput.displayName = "InputGroupInput"
+
 interface InputGroupAddonProps extends React.HTMLAttributes<HTMLDivElement> {
   align?: "block-start" | "block-end"
 }
@@ -78,5 +95,5 @@ const InputGroupButton = React.forwardRef<
 })
 InputGroupButton.displayName = "InputGroupButton"
 
-export { InputGroup, InputGroupTextarea, InputGroupAddon, InputGroupButton }
+export { InputGroup, InputGroupInput, InputGroupTextarea, InputGroupAddon, InputGroupButton }
 
