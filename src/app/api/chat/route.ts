@@ -308,11 +308,21 @@ async function ensureMCPInitialized() {
   if (!mcpInitialized) {
     try {
       await initializeMCP({ autoConnect: true, loadUserConfig: true });
-      mcpInitialized = true;
-      console.log('[api/chat] MCP system initialized');
+
+      // Only mark as initialized if we have connected servers
+      // This allows retry on transient connection failures
+      if (isMCPAvailable()) {
+        mcpInitialized = true;
+        console.log('[api/chat] MCP system initialized with connected servers');
+      } else {
+        console.warn(
+          '[api/chat] MCP initialized but no servers connected - will retry on next request',
+        );
+      }
     } catch (error) {
       console.error('[api/chat] Failed to initialize MCP:', error);
       // Continue without MCP - graceful degradation
+      // mcpInitialized stays false to allow retry
     }
   }
 }
