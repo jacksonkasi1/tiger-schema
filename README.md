@@ -53,8 +53,17 @@ Tiger SQL now features a **scalable, multi-server MCP architecture** that provid
 - 🔧 **Extensible** - Add your own MCP servers via configuration
 - ⚡ **Production-Ready** - Built-in connection management, retry logic, and health checks
 
-**Built-in MCP Server:**
-- [pg-aiguide](https://github.com/timescale/pg-aiguide) - AI-optimized PostgreSQL expertise by Timescale
+#### 🐘 Built-in: [pg-aiguide](https://github.com/timescale/pg-aiguide) by Timescale
+
+Tiger SQL comes with **[pg-aiguide](https://github.com/timescale/pg-aiguide)** pre-integrated - an AI-optimized PostgreSQL knowledge base created by [Timescale](https://www.timescale.com/). This MCP server provides:
+
+| Tool | Description |
+|------|-------------|
+| `pg_view_skill` | Get curated PostgreSQL best practices on specific topics |
+| `pg_list_skills` | Browse all available PostgreSQL knowledge topics |
+| `pg_semantic_search_postgres_docs` | Semantic search across official PostgreSQL documentation |
+
+> **No setup required!** pg-aiguide works out of the box. The AI assistant automatically uses it when you ask about PostgreSQL best practices, optimization, or schema design patterns.
 
 **User Controls:**
 Users can control MCP behavior with special commands:
@@ -323,8 +332,10 @@ Tiger SQL features a **scalable, configuration-driven MCP architecture** designe
 ### Learn More
 
 - [MCP Architecture Documentation](docs/MCP_INTEGRATION_PLAN.md)
+- [MCP Usage Guide](docs/MCP_USAGE_GUIDE.md)
+- [MCP Quick Start](MCP_QUICKSTART.md)
 - [Vercel AI SDK MCP Guide](https://ai-sdk.dev/docs/ai-sdk-core/mcp-tools)
-- [pg-aiguide GitHub](https://github.com/timescale/pg-aiguide)
+- [pg-aiguide GitHub](https://github.com/timescale/pg-aiguide) - Built-in PostgreSQL knowledge by Timescale
 
 ## 🤝 Contributing
 
