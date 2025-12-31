@@ -205,11 +205,11 @@ const ThreadSuggestions: FC = () => {
 const Composer: FC<ThreadProps> = ({ models, currentModel, onModelChange }) => {
   return (
     <ComposerPrimitive.Root className="aui-composer-root relative flex w-full flex-col">
-      <ComposerPrimitive.AttachmentDropzone className="aui-composer-attachment-dropzone flex w-full flex-col rounded-2xl border border-input bg-background shadow-sm transition-all focus-within:border-gray-300 dark:focus-within:border-gray-700 overflow-hidden min-h-[120px]">
+      <ComposerPrimitive.AttachmentDropzone className="aui-composer-attachment-dropzone flex w-full flex-col rounded-2xl border border-input bg-background shadow-sm transition-all focus-within:border-gray-300 dark:focus-within:border-gray-700 overflow-hidden min-h-[120px] pointer-events-auto">
         <ComposerAttachments />
         <ComposerPrimitive.Input
           placeholder="Ask about your schema..."
-          className="aui-composer-input flex-1 w-full resize-none bg-transparent p-3 text-sm outline-none placeholder:text-muted-foreground focus-visible:ring-0 border-none shadow-none ring-0 focus-visible:ring-offset-0"
+          className="aui-composer-input min-h-[80px] w-full resize-none bg-transparent p-3 text-sm outline-none placeholder:text-muted-foreground focus-visible:ring-0 border-none shadow-none ring-0 focus-visible:ring-offset-0 pointer-events-auto"
           rows={1}
           autoFocus
           aria-label="Message input"
