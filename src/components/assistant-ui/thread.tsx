@@ -314,7 +314,7 @@ const MessageError: FC = () => {
 const AssistantMessage: FC = () => {
   return (
     <MessagePrimitive.Root
-      className="aui-assistant-message-root fade-in slide-in-from-bottom-1 relative mx-auto w-full max-w-(--thread-max-width) animate-in py-4 duration-150"
+      className="aui-assistant-message-root fade-in slide-in-from-bottom-1 relative mx-auto w-full max-w-(--thread-max-width) animate-in py-4 duration-150 group"
       data-role="assistant"
     >
       <div className="aui-assistant-message-content wrap-break-word px-1 text-foreground leading-relaxed text-sm">
@@ -329,7 +329,7 @@ const AssistantMessage: FC = () => {
         <MessageError />
       </div>
 
-      <div className="aui-assistant-message-footer mt-2 flex items-center justify-between">
+      <div className="aui-assistant-message-footer mt-2 flex items-center justify-between relative min-h-[24px]">
         <BranchPicker />
         <AssistantActionBar />
       </div>
@@ -341,9 +341,8 @@ const AssistantActionBar: FC = () => {
   return (
     <ActionBarPrimitive.Root
       hideWhenRunning
-      autohide="not-last"
       autohideFloat="single-branch"
-      className="aui-assistant-action-bar-root flex gap-1 items-center opacity-0 transition-opacity group-hover:opacity-100 data-[floating]:opacity-100"
+      className="aui-assistant-action-bar-root absolute left-0 top-0 flex gap-1 items-center opacity-0 transition-opacity group-hover:opacity-100 data-[floating]:opacity-100"
     >
       <ActionBarPrimitive.Copy asChild>
         <TooltipIconButton
