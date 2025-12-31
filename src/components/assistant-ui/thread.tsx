@@ -329,9 +329,10 @@ const AssistantMessage: FC = () => {
         <MessageError />
       </div>
 
-      <div className="aui-assistant-message-footer mt-2 flex items-center justify-between relative min-h-[24px]">
+      <AssistantActionBar />
+
+      <div className="aui-assistant-message-footer mt-2 flex items-center justify-between">
         <BranchPicker />
-        <AssistantActionBar />
       </div>
     </MessagePrimitive.Root>
   );
@@ -342,7 +343,7 @@ const AssistantActionBar: FC = () => {
     <ActionBarPrimitive.Root
       hideWhenRunning
       autohideFloat="single-branch"
-      className="aui-assistant-action-bar-root absolute left-0 top-0 flex gap-1 items-center opacity-0 transition-opacity group-hover:opacity-100 data-[floating]:opacity-100"
+      className="aui-assistant-action-bar-root mt-2 flex gap-1 items-center px-1"
     >
       <ActionBarPrimitive.Copy asChild>
         <TooltipIconButton
@@ -386,21 +387,17 @@ const AssistantActionBar: FC = () => {
 const UserMessage: FC = () => {
   return (
     <MessagePrimitive.Root
-      className="aui-user-message-root fade-in slide-in-from-bottom-1 mx-auto grid w-full max-w-(--thread-max-width) animate-in auto-rows-auto grid-cols-[1fr_auto] content-start gap-3 px-1 py-4 duration-150 group"
+      className="aui-user-message-root fade-in slide-in-from-bottom-1 mx-auto flex w-full max-w-(--thread-max-width) animate-in flex-col items-end px-1 py-4 duration-150 group"
       data-role="user"
     >
-      <div className="aui-user-message-content-wrapper col-start-2 row-start-1 max-w-full flex flex-col items-end">
-        <UserMessageAttachments />
-        <div className="aui-user-message-content wrap-break-word rounded-2xl bg-muted px-4 py-2.5 text-foreground text-sm">
-          <MessagePrimitive.Parts />
-        </div>
+      <UserMessageAttachments />
+      <div className="aui-user-message-content wrap-break-word rounded-2xl bg-muted px-4 py-2.5 text-foreground text-sm">
+        <MessagePrimitive.Parts />
       </div>
 
-      <div className="aui-user-action-bar-wrapper col-start-1 row-start-1 flex items-center justify-end opacity-0 transition-opacity group-hover:opacity-100 mr-2">
-        <UserActionBar />
-      </div>
+      <UserActionBar />
 
-      <BranchPicker className="aui-user-branch-picker col-span-full col-start-1 row-start-2 justify-end mr-1" />
+      <BranchPicker className="aui-user-branch-picker mt-2 justify-end" />
     </MessagePrimitive.Root>
   );
 };
@@ -409,9 +406,23 @@ const UserActionBar: FC = () => {
   return (
     <ActionBarPrimitive.Root
       hideWhenRunning
-      autohide="not-last"
-      className="aui-user-action-bar-root flex items-center"
+      className="aui-user-action-bar-root mt-2 flex items-center gap-1"
     >
+      <ActionBarPrimitive.Copy asChild>
+        <TooltipIconButton
+          tooltip="Copy"
+          size="icon"
+          variant="ghost"
+          className="size-6 text-muted-foreground/60 hover:text-foreground"
+        >
+          <AssistantIf condition={({ message }) => message.isCopied}>
+            <CheckIcon className="size-3.5" />
+          </AssistantIf>
+          <AssistantIf condition={({ message }) => !message.isCopied}>
+            <CopyIcon className="size-3.5" />
+          </AssistantIf>
+        </TooltipIconButton>
+      </ActionBarPrimitive.Copy>
       <ActionBarPrimitive.Edit asChild>
         <TooltipIconButton
           tooltip="Edit"
