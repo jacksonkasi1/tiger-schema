@@ -16,16 +16,14 @@ import {
   useThread,
   type ThreadMessage,
 } from '@assistant-ui/react';
-import {
-  useChatRuntime,
-  AssistantChatTransport,
-} from '@assistant-ui/react-ai-sdk';
+import { useAISDKRuntime } from '@assistant-ui/react-ai-sdk';
+import { useChat, type UIMessage } from '@ai-sdk/react';
+import { DefaultChatTransport } from 'ai';
 
 // ** import utils
 import { useStore } from '@/lib/store';
 import { useLocalStorage } from '@/lib/hooks';
 import { useChatHistory } from '@/hooks/use-chat-history';
-import { getThread } from '@/lib/db/chat-db';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 
@@ -272,13 +270,13 @@ export function AssistantSidebar({
     }
   }, []);
 
-  // Store handleDataPart in a ref for access in transport
+  // Store handleDataPart in a ref for access in fetch handler
   const handleDataPartRef = useRef(handleDataPart);
   handleDataPartRef.current = handleDataPart;
 
-  // Create transport with custom fetch to intercept data parts
+  // Create transport with custom fetch to intercept data parts and pass body
   const transport = useMemo(() => {
-    return new AssistantChatTransport({
+    return new DefaultChatTransport({
       api: '/api/chat',
       body: {
         provider: aiProvider === 'google' ? 'google' : 'openai',
@@ -361,15 +359,45 @@ export function AssistantSidebar({
     listOfTables,
   ]);
 
-  // Create runtime using assistant-ui's native hook
-  const runtime = useChatRuntime({
+  // Create useChat instance with transport
+  // Use currentThreadId as the chat ID so each thread has its own chat instance
+  const chat = useChat({
+    id: chatHistory.currentThreadId || 'default',
     transport,
   });
+
+  // Store chat.setMessages in a ref for use in handlers
+  const setMessagesRef = useRef(chat.setMessages);
+  setMessagesRef.current = chat.setMessages;
+
+  // Create runtime using useAISDKRuntime with direct useChat access
+  const runtime = useAISDKRuntime(chat);
 
   // Handle message updates from the Thread
   const handleMessagesChange = useCallback(
     (messages: ThreadMessage[]) => {
       if (!chatHistory.isInitialized || !chatHistory.currentThreadId) return;
+
+      // Only save when the last assistant message is complete (not streaming)
+      // This prevents saving incomplete messages with empty content
+      const lastMessage = messages[messages.length - 1];
+      if (lastMessage && lastMessage.role === 'assistant') {
+        // Check if the message is still being generated
+        const status = lastMessage.status;
+        if (status?.type === 'running' || status?.type === 'requires-action') {
+          // Still streaming, don't save yet
+          return;
+        }
+
+        // Check if assistant message has actual content
+        const hasContent = lastMessage.content.some(
+          (part) => part.type === 'text' && (part as { type: 'text'; text: string }).text.trim().length > 0
+        );
+        if (!hasContent) {
+          // No content yet, don't save
+          return;
+        }
+      }
 
       // Save thread with current messages
       chatHistory.saveCurrentThread(
@@ -386,19 +414,48 @@ export function AssistantSidebar({
     if (isOpen && !chatHistory.currentThreadId && chatHistory.isInitialized) {
       // Check if we have any threads in history
       if (chatHistory.threads.length > 0) {
-        // Set the most recent thread as current
+        // Load the most recent thread
         const recentThreadId = chatHistory.threads[0].id;
-        chatHistory.setCurrentThreadId(recentThreadId);
+        chatHistory.loadThread(recentThreadId).then((thread) => {
+          if (thread && thread.messages && thread.messages.length > 0) {
+            // Convert to ThreadMessageLike format
+            const messagesToLoad = thread.messages.map((msg) => {
+              const textParts = msg.content
+                .filter((part): part is { type: 'text'; text: string } => part.type === 'text')
+                .map((part) => ({ type: 'text' as const, text: part.text }));
 
-        // Sync runtime
-        getThread(recentThreadId).then((thread) => {
-          if (thread) {
-            const r = runtime as any;
-            if (r.thread?.reset) {
-              r.thread.reset(thread.messages);
-            } else if (r.reset) {
-              r.reset({ messages: thread.messages });
-            }
+              const msgAny = msg as any;
+              if (textParts.length === 0 && msgAny.parts) {
+                const partsContent = msgAny.parts
+                  .filter((p: any) => p.type === 'text' && p.text)
+                  .map((p: any) => ({ type: 'text' as const, text: p.text }));
+                if (partsContent.length > 0) {
+                  textParts.push(...partsContent);
+                }
+              }
+
+              return {
+                id: msg.id,
+                role: msg.role as 'user' | 'assistant' | 'system',
+                content: textParts.length > 0 ? textParts : [{ type: 'text' as const, text: ' ' }],
+                createdAt: msg.createdAt ? new Date(msg.createdAt) : new Date(),
+                // Always mark loaded messages as complete
+                ...(msg.role === 'assistant' && { status: { type: 'complete' as const } }),
+              };
+            });
+
+            // Convert to UIMessage format and set via AI SDK
+            const uiMessages: UIMessage[] = messagesToLoad.map((msg) => ({
+              id: msg.id,
+              role: msg.role as 'user' | 'assistant' | 'system',
+              content: '',
+              parts: msg.content.map((part) => ({
+                type: 'text' as const,
+                text: (part as { type: 'text'; text: string }).text,
+              })),
+              createdAt: msg.createdAt,
+            }));
+            setMessagesRef.current(uiMessages);
           }
         });
       } else {
@@ -411,32 +468,87 @@ export function AssistantSidebar({
 
   // Chat history handlers
   const handleNewThread = useCallback(() => {
-    // Switch to a new thread in the runtime (clears messages)
-    runtime.switchToNewThread();
+    // Clear messages via AI SDK setMessages
+    setMessagesRef.current([]);
     // Create new thread ID in chat history
     chatHistory.createNewThread();
     // Go back to chat view
     setShowHistory(false);
-  }, [chatHistory, runtime]);
+  }, [chatHistory]);
 
   const handleSelectThread = useCallback(
     async (threadId: string) => {
-      chatHistory.setCurrentThreadId(threadId);
+      console.log('[handleSelectThread] Loading thread:', threadId);
+      const thread = await chatHistory.loadThread(threadId);
+      console.log('[handleSelectThread] Loaded thread:', thread);
 
-      // Sync runtime
-      const thread = await getThread(threadId);
-      if (thread) {
-        const r = runtime as any;
-        if (r.thread?.reset) {
-          r.thread.reset(thread.messages);
-        } else if (r.reset) {
-          r.reset({ messages: thread.messages });
-        }
+      if (thread && thread.messages && thread.messages.length > 0) {
+        // Update the current thread ID in chat history state
+        chatHistory.setCurrentThreadId(threadId);
+
+        // Convert ThreadMessage[] to ThreadMessageLike[] format for runtime.thread.reset()
+        // The format is: { id, role, content: [{type, text}], createdAt, status? }
+        const messagesToLoad = thread.messages.map((msg) => {
+          // Extract text content from the content array
+          const textParts = msg.content
+            .filter((part): part is { type: 'text'; text: string } => part.type === 'text')
+            .map((part) => ({ type: 'text' as const, text: part.text }));
+
+          // For assistant messages with empty content, check if there's parts data
+          // Also handle messages that might have 'parts' instead of 'content'
+          const msgAny = msg as any;
+          if (textParts.length === 0 && msgAny.parts) {
+            const partsContent = msgAny.parts
+              .filter((p: any) => p.type === 'text' && p.text)
+              .map((p: any) => ({ type: 'text' as const, text: p.text }));
+            if (partsContent.length > 0) {
+              textParts.push(...partsContent);
+            }
+          }
+
+          return {
+            id: msg.id,
+            role: msg.role as 'user' | 'assistant' | 'system',
+            content: textParts.length > 0 ? textParts : [{ type: 'text' as const, text: ' ' }], // Fallback to space to avoid empty
+            createdAt: msg.createdAt ? new Date(msg.createdAt) : new Date(),
+            // Always mark loaded messages as complete - they were saved after completion
+            ...(msg.role === 'assistant' && { status: { type: 'complete' as const } }),
+          };
+        });
+
+        console.log('[handleSelectThread] Messages to load:', messagesToLoad);
+
+        // Convert messages to AI SDK UIMessage format
+        const uiMessages: UIMessage[] = messagesToLoad.map((msg) => ({
+          id: msg.id,
+          role: msg.role as 'user' | 'assistant' | 'system',
+          content: '',
+          parts: msg.content.map((part) => ({
+            type: 'text' as const,
+            text: (part as { type: 'text'; text: string }).text,
+          })),
+          createdAt: msg.createdAt,
+        }));
+
+        console.log('[handleSelectThread] Setting UIMessages:', uiMessages);
+
+        // Clear messages first, then set new messages after a tick
+        // This forces a clean slate before loading the new thread
+        chat.setMessages([]);
+
+        // Use requestAnimationFrame to ensure the clear has been processed
+        requestAnimationFrame(() => {
+          chat.setMessages(uiMessages);
+        });
+      } else {
+        console.log('[handleSelectThread] No messages to load, creating new thread');
+        // If no messages, clear messages for new thread
+        setMessagesRef.current([]);
+        chatHistory.setCurrentThreadId(threadId);
       }
-
       setShowHistory(false);
     },
-    [chatHistory, runtime],
+    [chatHistory, chat],
   );
 
   const handleDeleteThread = useCallback(
