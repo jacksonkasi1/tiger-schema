@@ -396,7 +396,7 @@ export function AssistantSidebar({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-y-0 right-0 z-40 w-[400px] min-w-[320px] max-w-[90vw] bg-background border-l shadow-2xl flex flex-col sm:max-w-[50vw]">
+    <div className="fixed inset-y-0 right-0 z-[60] w-[400px] min-w-[320px] max-w-[90vw] bg-background border-l shadow-2xl flex flex-col sm:max-w-[50vw]">
       <TooltipProvider>
         {/* Header */}
         <div className="flex items-center justify-between px-3 py-2 border-b min-h-[50px]">
