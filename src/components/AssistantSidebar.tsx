@@ -23,13 +23,14 @@ import { DefaultChatTransport } from 'ai';
 // ** import utils
 import { useStore } from '@/lib/store';
 import { useLocalStorage } from '@/lib/hooks';
+import { useHotkeys } from 'react-hotkeys-hook';
 import { useChatHistory } from '@/hooks/use-chat-history';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 
 // ** import ui components
 import { Button } from '@/components/ui/button';
-import { X, Undo2, Redo2, History, Sparkles } from 'lucide-react';
+import { X, Undo2, Redo2, History, Sparkles, Plus } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import {
   Tooltip,
@@ -391,7 +392,9 @@ export function AssistantSidebar({
 
         // Check if assistant message has actual content
         const hasContent = lastMessage.content.some(
-          (part) => part.type === 'text' && (part as { type: 'text'; text: string }).text.trim().length > 0
+          (part) =>
+            part.type === 'text' &&
+            (part as { type: 'text'; text: string }).text.trim().length > 0,
         );
         if (!hasContent) {
           // No content yet, don't save
@@ -421,7 +424,10 @@ export function AssistantSidebar({
             // Convert to ThreadMessageLike format
             const messagesToLoad = thread.messages.map((msg) => {
               const textParts = msg.content
-                .filter((part): part is { type: 'text'; text: string } => part.type === 'text')
+                .filter(
+                  (part): part is { type: 'text'; text: string } =>
+                    part.type === 'text',
+                )
                 .map((part) => ({ type: 'text' as const, text: part.text }));
 
               const msgAny = msg as any;
@@ -437,10 +443,15 @@ export function AssistantSidebar({
               return {
                 id: msg.id,
                 role: msg.role as 'user' | 'assistant' | 'system',
-                content: textParts.length > 0 ? textParts : [{ type: 'text' as const, text: ' ' }],
+                content:
+                  textParts.length > 0
+                    ? textParts
+                    : [{ type: 'text' as const, text: ' ' }],
                 createdAt: msg.createdAt ? new Date(msg.createdAt) : new Date(),
                 // Always mark loaded messages as complete
-                ...(msg.role === 'assistant' && { status: { type: 'complete' as const } }),
+                ...(msg.role === 'assistant' && {
+                  status: { type: 'complete' as const },
+                }),
               };
             });
 
@@ -476,6 +487,18 @@ export function AssistantSidebar({
     setShowHistory(false);
   }, [chatHistory]);
 
+  useHotkeys(
+    ['meta+n', 'ctrl+n'],
+    (e) => {
+      e.preventDefault();
+      if (isOpen) {
+        handleNewThread();
+      }
+    },
+    { enableOnFormTags: true, preventDefault: true },
+    [isOpen, handleNewThread],
+  );
+
   const handleSelectThread = useCallback(
     async (threadId: string) => {
       console.log('[handleSelectThread] Loading thread:', threadId);
@@ -491,7 +514,10 @@ export function AssistantSidebar({
         const messagesToLoad = thread.messages.map((msg) => {
           // Extract text content from the content array
           const textParts = msg.content
-            .filter((part): part is { type: 'text'; text: string } => part.type === 'text')
+            .filter(
+              (part): part is { type: 'text'; text: string } =>
+                part.type === 'text',
+            )
             .map((part) => ({ type: 'text' as const, text: part.text }));
 
           // For assistant messages with empty content, check if there's parts data
@@ -509,10 +535,15 @@ export function AssistantSidebar({
           return {
             id: msg.id,
             role: msg.role as 'user' | 'assistant' | 'system',
-            content: textParts.length > 0 ? textParts : [{ type: 'text' as const, text: ' ' }], // Fallback to space to avoid empty
+            content:
+              textParts.length > 0
+                ? textParts
+                : [{ type: 'text' as const, text: ' ' }], // Fallback to space to avoid empty
             createdAt: msg.createdAt ? new Date(msg.createdAt) : new Date(),
             // Always mark loaded messages as complete - they were saved after completion
-            ...(msg.role === 'assistant' && { status: { type: 'complete' as const } }),
+            ...(msg.role === 'assistant' && {
+              status: { type: 'complete' as const },
+            }),
           };
         });
 
@@ -541,7 +572,9 @@ export function AssistantSidebar({
           chat.setMessages(uiMessages);
         });
       } else {
-        console.log('[handleSelectThread] No messages to load, creating new thread');
+        console.log(
+          '[handleSelectThread] No messages to load, creating new thread',
+        );
         // If no messages, clear messages for new thread
         setMessagesRef.current([]);
         chatHistory.setCurrentThreadId(threadId);
@@ -660,6 +693,26 @@ export function AssistantSidebar({
                   </div>
 
                   <div className="flex items-center gap-0.5">
+                    {/* New Chat */}
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8"
+                          onClick={handleNewThread}
+                        >
+                          <Plus className="size-4 text-muted-foreground" />
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        New Chat{' '}
+                        <span className="text-muted-foreground ml-1 text-xs">
+                          ⌘N
+                        </span>
+                      </TooltipContent>
+                    </Tooltip>
+
                     {/* History Button */}
                     <Tooltip>
                       <TooltipTrigger asChild>
@@ -705,62 +758,6 @@ export function AssistantSidebar({
                       </TooltipTrigger>
                       <TooltipContent>Redo</TooltipContent>
                     </Tooltip>
-
-                    {/* History */}
-                    <Popover>
-                      <PopoverTrigger asChild>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8"
-                          disabled={operationHistory.length === 0}
-                        >
-                          <History className="size-4 text-muted-foreground" />
-                        </Button>
-                      </PopoverTrigger>
-                      <PopoverContent className="w-64 p-0" align="end">
-                        <div className="flex items-center justify-between p-2 border-b bg-muted/30">
-                          <span className="text-xs font-medium">History</span>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={clearHistory}
-                            className="h-5 text-[10px] px-2"
-                          >
-                            Clear
-                          </Button>
-                        </div>
-                        <div className="max-h-64 overflow-y-auto p-1">
-                          {operationHistory.length === 0 ? (
-                            <p className="text-xs text-muted-foreground py-4 text-center">
-                              No operations yet
-                            </p>
-                          ) : (
-                            operationHistory.map((op, i) => (
-                              <div
-                                key={op.id}
-                                className={cn(
-                                  'text-xs p-2 rounded flex flex-col gap-0.5',
-                                  i === historyIndex
-                                    ? 'bg-primary/10 text-primary'
-                                    : 'hover:bg-muted text-muted-foreground',
-                                )}
-                              >
-                                <span className="font-medium">
-                                  {i === historyIndex && 'Current: '}
-                                  {Object.keys(op.before || {}).length > 0
-                                    ? 'Schema Update'
-                                    : 'Operation'}
-                                </span>
-                                <span className="text-[10px] opacity-70">
-                                  {new Date(op.timestamp).toLocaleTimeString()}
-                                </span>
-                              </div>
-                            ))
-                          )}
-                        </div>
-                      </PopoverContent>
-                    </Popover>
 
                     <div className="w-px h-4 bg-border mx-1" />
 
