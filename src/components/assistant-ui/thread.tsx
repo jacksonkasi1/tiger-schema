@@ -44,7 +44,6 @@ import {
   SelectItem,
   SelectLabel,
   SelectTrigger,
-  SelectValue,
 } from '@/components/ui/select';
 
 export interface UnifiedModel {
@@ -87,7 +86,7 @@ export const Thread: FC<ThreadProps> = ({
           }}
         />
 
-        <ThreadPrimitive.ViewportFooter className="aui-thread-viewport-footer sticky bottom-0 mx-auto mt-auto flex w-full max-w-(--thread-max-width) flex-col gap-3 overflow-visible rounded-t-2xl bg-gradient-to-t from-background via-background to-transparent pb-4 px-4 pt-10">
+        <ThreadPrimitive.ViewportFooter className="aui-thread-viewport-footer sticky bottom-0 mx-auto mt-auto flex w-full max-w-(--thread-max-width) flex-col gap-3 overflow-visible rounded-t-2xl bg-gradient-to-t from-background via-background to-transparent pb-4 px-2 pt-10">
           <ThreadScrollToBottom />
           <Composer
             models={models}
@@ -206,27 +205,30 @@ const ThreadSuggestions: FC = () => {
 const Composer: FC<ThreadProps> = ({ models, currentModel, onModelChange }) => {
   return (
     <ComposerPrimitive.Root className="aui-composer-root relative flex w-full flex-col">
-      <ComposerPrimitive.AttachmentDropzone className="aui-composer-attachment-dropzone flex w-full flex-col rounded-2xl border bg-background shadow-sm transition-shadow focus-within:ring-1 focus-within:ring-ring focus-within:border-ring overflow-hidden">
+      <ComposerPrimitive.AttachmentDropzone className="aui-composer-attachment-dropzone flex w-full flex-col rounded-2xl border border-input bg-background shadow-sm transition-all focus-within:border-gray-300 dark:focus-within:border-gray-700 overflow-hidden min-h-[120px]">
         <ComposerAttachments />
         <ComposerPrimitive.Input
           placeholder="Ask about your schema..."
-          className="aui-composer-input min-h-[44px] w-full resize-none bg-transparent px-4 py-3 text-sm outline-none placeholder:text-muted-foreground focus-visible:ring-0"
+          className="aui-composer-input flex-1 w-full resize-none bg-transparent p-3 text-sm outline-none placeholder:text-muted-foreground focus-visible:ring-0 border-none shadow-none ring-0 focus-visible:ring-offset-0"
           rows={1}
           autoFocus
           aria-label="Message input"
         />
 
-        <div className="flex items-center justify-between px-3 pb-3">
-          <div className="flex items-center gap-1">
-            <ComposerAddAttachment />
+        <div className="flex items-center justify-between px-2 pb-2 pt-1 mt-auto">
+          <div className="flex items-center gap-2">
+            <ComposerAddAttachment className="h-8 w-8 rounded-full text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors" />
+
             {models && models.length > 0 && currentModel && onModelChange && (
               <Select value={currentModel.id} onValueChange={onModelChange}>
-                <SelectTrigger className="h-6 w-fit gap-1.5 rounded-full border-0 bg-muted/50 px-2 text-[10px] font-medium hover:bg-muted focus:ring-0">
-                  <span className="text-muted-foreground/70">
+                <SelectTrigger className="h-8 w-fit gap-2 rounded-full border border-input bg-transparent px-3 text-xs font-medium hover:bg-muted/50 focus:ring-0 focus:ring-offset-0 transition-colors shadow-sm">
+                  <span className="text-foreground">
                     {currentModel.provider === 'google' ? 'Gemini' : 'OpenAI'}
                   </span>
-                  <span className="w-px h-2 bg-border" />
-                  <SelectValue />
+                  <span className="text-muted-foreground/40">|</span>
+                  <span className="text-muted-foreground truncate max-w-[100px]">
+                    {currentModel.name}
+                  </span>
                 </SelectTrigger>
                 <SelectContent align="start">
                   <SelectGroup>
@@ -254,7 +256,7 @@ const Composer: FC<ThreadProps> = ({ models, currentModel, onModelChange }) => {
             )}
           </div>
 
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-2">
             <ComposerAction />
           </div>
         </div>
@@ -274,7 +276,7 @@ const ComposerAction: FC = () => {
             type="submit"
             variant="default"
             size="icon"
-            className="aui-composer-send size-8 rounded-lg transition-all"
+            className="aui-composer-send size-8 rounded-full transition-all shadow-sm"
             aria-label="Send message"
           >
             <ArrowUpIcon className="aui-composer-send-icon size-4" />
@@ -288,7 +290,7 @@ const ComposerAction: FC = () => {
             type="button"
             variant="default"
             size="icon"
-            className="aui-composer-cancel size-8 rounded-lg transition-all"
+            className="aui-composer-cancel size-8 rounded-full transition-all shadow-sm"
             aria-label="Stop generating"
           >
             <SquareIcon className="aui-composer-cancel-icon size-3.5 fill-current" />

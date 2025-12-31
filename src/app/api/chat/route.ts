@@ -1,4 +1,11 @@
-import { streamText, stepCountIs, tool, convertToModelMessages } from 'ai';
+import {
+  streamText,
+  stepCountIs,
+  tool,
+  convertToModelMessages,
+  createUIMessageStream,
+  createUIMessageStreamResponse,
+} from 'ai';
 import type { ProviderOptions } from '@ai-sdk/provider-utils';
 import { openai, createOpenAI } from '@ai-sdk/openai';
 import { google, createGoogleGenerativeAI } from '@ai-sdk/google';
@@ -140,8 +147,8 @@ const renameTableParams = z.object({
 });
 
 const addColumnParams = z.object({
-  tableId: z.string().min(1).describe('The table to add column to'),
   column: columnInputSchema.describe('Column definition'),
+  tableId: z.string().min(1).describe('The table to add column to'),
 });
 
 const dropColumnParams = z.object({
@@ -1112,51 +1119,134 @@ export async function POST(req: Request) {
       maxSteps: maxAgentSteps,
     });
 
-    // Use streamText directly for better compatibility with assistant-ui
-    const result = streamText({
-      model,
-      system: SYSTEM_PROMPT,
-      messages: modelMessages,
-      tools,
-      toolChoice: toolChoiceSetting,
-      stopWhen: stepCountIs(maxAgentSteps),
-      providerOptions,
-      abortSignal: abortController.signal,
-      onStepFinish: ({ toolCalls, toolResults, text, finishReason }) => {
-        console.log(
-          `[Step] Tool calls: ${toolCalls?.length || 0}, ` +
-            `Results: ${toolResults?.length || 0}, ` +
-            `Text: ${text ? text.substring(0, 50) : 'none'}, ` +
-            `Finish: ${finishReason}`,
+    // Use createUIMessageStream to support custom data parts for schema updates
+    const stream = createUIMessageStream({
+      execute: async ({ writer }) => {
+        // Send initial notification
+        writer.write({
+          type: 'data-notification',
+          data: {
+            message: 'Processing your request...',
+            level: 'info',
+          },
+          transient: true,
+        });
+
+        const result = streamText({
+          model,
+          system: SYSTEM_PROMPT,
+          messages: modelMessages,
+          tools,
+          toolChoice: toolChoiceSetting,
+          stopWhen: stepCountIs(maxAgentSteps),
+          providerOptions,
+          abortSignal: abortController.signal,
+          onStepFinish: ({ toolCalls, toolResults, text, finishReason }) => {
+            console.log(
+              `[Step] Tool calls: ${toolCalls?.length || 0}, ` +
+                `Results: ${toolResults?.length || 0}, ` +
+                `Text: ${text ? text.substring(0, 50) : 'none'}, ` +
+                `Finish: ${finishReason}`,
+            );
+
+            if (toolCalls) {
+              toolCalls.forEach((call, i) => {
+                console.log(`  Tool ${i + 1}: ${call.toolName}`);
+              });
+            }
+
+            // Track operation count for final notification
+            if (toolResults && toolResults.length > 0) {
+              operationCount += toolResults.length;
+            }
+
+            // Send schema state update after each step with tool results
+            if (toolResults && toolResults.length > 0) {
+              writer.write({
+                type: 'data-tables-batch',
+                data: {
+                  tables: cloneTables(schemaState),
+                  isComplete: false,
+                },
+              });
+            }
+          },
+          onFinish: async () => {
+            // Log final state
+            const tableCount = Object.keys(schemaState).length;
+            console.log(
+              `[api/chat] Finished: ${operationCount} operations, ${tableCount} tables`,
+            );
+
+            // Send final schema state
+            writer.write({
+              type: 'data-tables-batch',
+              data: {
+                tables: cloneTables(schemaState),
+                isComplete: true,
+              },
+            });
+
+            // Send operation history for undo/redo
+            if (operationHistory.length > 0) {
+              writer.write({
+                type: 'data-operation-history',
+                data: {
+                  operations: operationHistory,
+                  canUndo: operationHistory.length > 0,
+                },
+              });
+            }
+
+            // Send completion notification
+            writer.write({
+              type: 'data-notification',
+              data: {
+                message: `Completed ${operationCount} operations on ${tableCount} tables`,
+                level: 'success',
+              },
+              transient: true,
+            });
+          },
+          onError: (error: unknown) => {
+            console.error('[api/chat] streamText error:', error);
+          },
+        });
+
+        // Merge the streamText result into our custom stream
+        writer.merge(
+          result.toUIMessageStream({
+            sendReasoning: true,
+            sendSources: false,
+            onError: (error: unknown) => {
+              console.error('[Stream error]', error);
+              return error instanceof Error ? error.message : String(error);
+            },
+          }),
         );
 
-        if (toolCalls) {
-          toolCalls.forEach((call, i) => {
-            console.log(`  Tool ${i + 1}: ${call.toolName}`);
-          });
+        // Wait for the stream to complete
+        try {
+          await result.text;
+        } catch (error: unknown) {
+          if (
+            error instanceof Error &&
+            (error.name === 'AbortError' || error.message.includes('aborted'))
+          ) {
+            console.log('[api/chat] Stream aborted by client');
+          } else {
+            console.error('[api/chat] Stream error:', error);
+          }
         }
-
-        // Track operation count for final notification
-        if (toolResults && toolResults.length > 0) {
-          operationCount += toolResults.length;
-        }
-      },
-      onFinish: async () => {
-        // Log final state
-        const tableCount = Object.keys(schemaState).length;
-        console.log(
-          `[api/chat] Finished: ${operationCount} operations, ${tableCount} tables`,
-        );
-      },
-      onError: (error: unknown) => {
-        console.error('[api/chat] streamText error:', error);
       },
     });
 
-    // Return the UI message stream response directly
-    return result.toUIMessageStreamResponse({
-      sendReasoning: true,
-      sendSources: false,
+    // Return the custom stream response
+    return createUIMessageStreamResponse({
+      stream,
+      headers: {
+        'Cache-Control': 'no-cache, no-transform',
+      },
     });
   } catch (error) {
     console.error('[api/chat] unexpected error:', error);

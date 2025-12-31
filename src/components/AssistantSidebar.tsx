@@ -10,7 +10,7 @@ import type {
 } from '@/lib/types';
 
 // ** import core packages
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback, useRef } from 'react';
 import { AssistantRuntimeProvider } from '@assistant-ui/react';
 import {
   useChatRuntime,
@@ -187,82 +187,149 @@ export function AssistantSidebar({
     return tablesList;
   }, [tables]);
 
-  // Create transport with configuration
-  const transport = useMemo(
-    () =>
-      new AssistantChatTransport({
-        api: '/api/chat',
-        body: {
-          provider: aiProvider === 'google' ? 'google' : 'openai',
-          apiKey: aiProvider === 'google' ? googleApiKey : openaiApiKey,
-          model: aiProvider === 'google' ? googleModel : openaiModel,
-          schema: listOfTables,
-        },
-      }),
-    [
-      aiProvider,
-      googleApiKey,
-      openaiApiKey,
-      googleModel,
-      openaiModel,
-      listOfTables,
-    ],
-  );
+  // Ref to store the latest callbacks to avoid stale closures
+  const callbacksRef = useRef({
+    updateTablesFromAI,
+    setOperationHistory,
+    setHistoryIndex,
+  });
+  callbacksRef.current = {
+    updateTablesFromAI,
+    setOperationHistory,
+    setHistoryIndex,
+  };
+
+  // Handle data parts from the stream - called via custom fetch handler
+  const handleDataPart = useCallback((type: string, data: unknown) => {
+    const { updateTablesFromAI, setOperationHistory, setHistoryIndex } =
+      callbacksRef.current;
+
+    switch (type) {
+      case 'data-tables-batch': {
+        const batchData = data as StreamingTablesBatch;
+        if (batchData.tables && Object.keys(batchData.tables).length > 0) {
+          updateTablesFromAI(batchData.tables);
+          if (batchData.isComplete) {
+            toast.success('Schema Updated', {
+              description: `Updated ${Object.keys(batchData.tables).length} tables`,
+            });
+          }
+        }
+        break;
+      }
+      case 'data-notification': {
+        const notificationData = data as StreamingNotification;
+        if (notificationData.level === 'success') {
+          toast.success('Success', { description: notificationData.message });
+        } else if (notificationData.level === 'error') {
+          toast.error('Error', { description: notificationData.message });
+        }
+        break;
+      }
+      case 'data-operation-history': {
+        const historyData = data as StreamingOperationHistory;
+        if (historyData.operations) {
+          setOperationHistory((prev) => [...prev, ...historyData.operations]);
+          setHistoryIndex((prev) => prev + historyData.operations.length);
+        }
+        break;
+      }
+    }
+  }, []);
+
+  // Store handleDataPart in a ref for access in transport
+  const handleDataPartRef = useRef(handleDataPart);
+  handleDataPartRef.current = handleDataPart;
+
+  // Create transport with custom fetch to intercept data parts
+  const transport = useMemo(() => {
+    return new AssistantChatTransport({
+      api: '/api/chat',
+      body: {
+        provider: aiProvider === 'google' ? 'google' : 'openai',
+        apiKey: aiProvider === 'google' ? googleApiKey : openaiApiKey,
+        model: aiProvider === 'google' ? googleModel : openaiModel,
+        schema: listOfTables,
+      },
+      fetch: async (url, options) => {
+        const response = await fetch(url, options);
+
+        if (!response.body) {
+          return response;
+        }
+
+        // Create a transform stream to intercept data parts
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+
+        const stream = new ReadableStream({
+          async start(controller) {
+            try {
+              while (true) {
+                const { done, value } = await reader.read();
+                if (done) {
+                  controller.close();
+                  break;
+                }
+
+                // Pass through the chunk
+                controller.enqueue(value);
+
+                // Also parse and handle data parts
+                const text = decoder.decode(value, { stream: true });
+                const lines = text.split('\n');
+
+                for (const line of lines) {
+                  // Look for data-* type lines (AI SDK stream format)
+                  if (line.startsWith('g:')) {
+                    try {
+                      // Parse the JSON after "g:"
+                      const jsonStr = line.slice(2);
+                      const parsed = JSON.parse(jsonStr);
+
+                      // Check if it's a data part
+                      if (
+                        parsed &&
+                        typeof parsed === 'object' &&
+                        'type' in parsed
+                      ) {
+                        const partType = parsed.type as string;
+                        if (partType.startsWith('data-')) {
+                          handleDataPartRef.current(partType, parsed.data);
+                        }
+                      }
+                    } catch {
+                      // Not valid JSON, skip
+                    }
+                  }
+                }
+              }
+            } catch (error) {
+              controller.error(error);
+            }
+          },
+        });
+
+        return new Response(stream, {
+          headers: response.headers,
+          status: response.status,
+          statusText: response.statusText,
+        });
+      },
+    });
+  }, [
+    aiProvider,
+    googleApiKey,
+    openaiApiKey,
+    googleModel,
+    openaiModel,
+    listOfTables,
+  ]);
 
   // Create runtime using assistant-ui's native hook
   const runtime = useChatRuntime({
     transport,
   });
-
-  // Handle data events from the stream
-  useEffect(() => {
-    const handleDataEvent = (event: CustomEvent) => {
-      const { type, data } = event.detail;
-
-      switch (type) {
-        case 'data-tables-batch': {
-          const batchData = data as StreamingTablesBatch;
-          if (batchData.tables && Object.keys(batchData.tables).length > 0) {
-            updateTablesFromAI(batchData.tables);
-            if (batchData.isComplete) {
-              toast.success('Schema Updated', {
-                description: `Updated ${Object.keys(batchData.tables).length} tables`,
-              });
-            }
-          }
-          break;
-        }
-        case 'data-notification': {
-          const notificationData = data as StreamingNotification;
-          if (notificationData.level === 'success') {
-            toast.success('Success', { description: notificationData.message });
-          } else if (notificationData.level === 'error') {
-            toast.error('Error', { description: notificationData.message });
-          }
-          break;
-        }
-        case 'data-operation-history': {
-          const historyData = data as StreamingOperationHistory;
-          if (historyData.operations) {
-            setOperationHistory((prev) => [...prev, ...historyData.operations]);
-            setHistoryIndex((prev) => prev + historyData.operations.length);
-          }
-          break;
-        }
-      }
-    };
-
-    window.addEventListener(
-      'assistant-data' as keyof WindowEventMap,
-      handleDataEvent as EventListener,
-    );
-    return () => {
-      window.removeEventListener(
-        'assistant-data' as keyof WindowEventMap,
-        handleDataEvent as EventListener,
-      );
-    };
-  }, [updateTablesFromAI]);
 
   // Undo/Redo handlers
   const canUndo = historyIndex >= 0;

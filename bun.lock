@@ -8,7 +8,7 @@
         "@ai-sdk/mcp": "^1.0.1",
         "@ai-sdk/openai": "^3.0.1",
         "@ai-sdk/react": "^3.0.3",
-        "@assistant-ui/react": "^0.11.53",
+        "@assistant-ui/react": "0.11.53",
         "@assistant-ui/react-ai-sdk": "^1.1.20",
         "@assistant-ui/react-markdown": "^0.11.9",
         "@dagrejs/dagre": "^1.1.8",
